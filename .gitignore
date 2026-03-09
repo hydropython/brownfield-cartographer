@@ -1,0 +1,13 @@
+
+# ========================================
+# Modular Target Repo Handling
+# ========================================
+# Local clones of repos to analyze (NEVER commit these)
+targets/
+
+# Per-target analysis outputs (COMMIT these)
+# Format: .cartography/<target-name>/
+!.cartography/
+
+# Per-target reconnaissance notes (COMMIT these)
+# Format: RECONNAISSANCE-<target-name>.md (optional)
