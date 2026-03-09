@@ -1,0 +1,61 @@
+[project]
+name = "brownfield-cartographer"
+version = "0.1.0"
+description = "Codebase intelligence system for Forward-Deployed Engineers"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    # Code parsing (AST)
+    "tree-sitter>=0.21.0",
+    "tree-sitter-python>=0.21.0",
+    "tree-sitter-sql>=0.3.0",
+    "tree-sitter-yaml>=0.6.0",
+    
+    # SQL parsing + lineage
+    "sqlglot>=23.0.0",
+    
+    # Graph algorithms
+    "networkx>=3.2.0",
+    
+    # Agent orchestration (Navigator - Phase 4)
+    "langgraph>=0.0.40",
+    
+    # Data validation + schemas
+    "pydantic>=2.5.0",
+    
+    # LLM + token counting
+    "tiktoken>=0.7.0",
+    "openai>=1.10.0",
+    
+    # Vector search (semantic embeddings)
+    "faiss-cpu>=1.7.4",
+    
+    # Templating + CLI
+    "jinja2>=3.1.0",
+    "typer>=0.9.0",
+    "rich>=13.7.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-cov>=4.1.0",
+    "ruff>=0.1.0",
+    "mypy>=1.8.0",
+]
+
+[project.scripts]
+cartographer = "brownfield_cartographer.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
