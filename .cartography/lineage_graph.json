@@ -1,0 +1,360 @@
+{
+  "sources": [
+    "raw_customers",
+    "raw_orders",
+    "raw_payments"
+  ],
+  "sinks": [
+    "customers.customer_id",
+    "customers.first_name",
+    "customers.first_order",
+    "customers.last_name",
+    "customers.most_recent_order",
+    "customers.number_of_orders",
+    "customers.total_order_amount",
+    "customers_test_not_null",
+    "customers_test_unique",
+    "orders.amount",
+    "orders.bank_transfer_amount",
+    "orders.coupon_amount",
+    "orders.credit_card_amount",
+    "orders.customer_id",
+    "orders.gift_card_amount",
+    "orders.order_date",
+    "orders.order_id",
+    "orders.status",
+    "orders_test_not_null",
+    "orders_test_unique",
+    "orders_test_{'accepted_values': {'values': ['placed', 'shipped', 'completed', 'return_pending', 'returned']}}",
+    "orders_test_{'relationships': {'to': \"ref('customers')\", 'field': 'customer_id'}}",
+    "stg_customers.customer_id",
+    "stg_customers_test_not_null",
+    "stg_customers_test_unique",
+    "stg_orders.order_id",
+    "stg_orders.status",
+    "stg_orders_test_not_null",
+    "stg_orders_test_unique",
+    "stg_orders_test_{'accepted_values': {'values': ['placed', 'shipped', 'completed', 'return_pending', 'returned']}}",
+    "stg_payments.payment_id",
+    "stg_payments.payment_method",
+    "stg_payments_test_not_null",
+    "stg_payments_test_unique",
+    "stg_payments_test_{'accepted_values': {'values': ['credit_card', 'coupon', 'bank_transfer', 'gift_card']}}"
+  ],
+  "total_nodes": 43,
+  "total_edges": 43,
+  "parse_warnings": [],
+  "analyzer_counts": {
+    "sql": 5,
+    "yaml": 3,
+    "python": 0,
+    "notebook": 0,
+    "airflow": 0,
+    "prefect": 0
+  },
+  "nodes": [
+    "stg_customers",
+    "customers",
+    "stg_orders",
+    "stg_payments",
+    "orders",
+    "raw_customers",
+    "raw_orders",
+    "raw_payments",
+    "customers.customer_id",
+    "customers.first_name",
+    "customers.last_name",
+    "customers.first_order",
+    "customers.most_recent_order",
+    "customers.number_of_orders",
+    "customers.total_order_amount",
+    "customers_test_unique",
+    "customers_test_not_null",
+    "orders.order_id",
+    "orders.customer_id",
+    "orders.order_date",
+    "orders.status",
+    "orders.amount",
+    "orders.credit_card_amount",
+    "orders.coupon_amount",
+    "orders.bank_transfer_amount",
+    "orders.gift_card_amount",
+    "orders_test_unique",
+    "orders_test_not_null",
+    "orders_test_{'relationships': {'to': \"ref('customers')\", 'field': 'customer_id'}}",
+    "orders_test_{'accepted_values': {'values': ['placed', 'shipped', 'completed', 'return_pending', 'returned']}}",
+    "stg_customers.customer_id",
+    "stg_customers_test_unique",
+    "stg_customers_test_not_null",
+    "stg_orders.order_id",
+    "stg_orders.status",
+    "stg_orders_test_unique",
+    "stg_orders_test_not_null",
+    "stg_orders_test_{'accepted_values': {'values': ['placed', 'shipped', 'completed', 'return_pending', 'returned']}}",
+    "stg_payments.payment_id",
+    "stg_payments.payment_method",
+    "stg_payments_test_unique",
+    "stg_payments_test_not_null",
+    "stg_payments_test_{'accepted_values': {'values': ['credit_card', 'coupon', 'bank_transfer', 'gift_card']}}"
+  ],
+  "edges": [
+    {
+      "source": "stg_customers",
+      "target": "customers",
+      "type": "DEPENDS_ON",
+      "file": "D:\\10 ACADAMY KIFIYA\\TRP_Training\\week 4\\brownfield-cartographer\\targets\\jaffle_shop\\models\\customers.sql"
+    },
+    {
+      "source": "stg_customers",
+      "target": "stg_customers.customer_id",
+      "type": "HAS_COLUMN",
+      "file": "D:\\10 ACADAMY KIFIYA\\TRP_Training\\week 4\\brownfield-cartographer\\targets\\jaffle_shop\\models\\staging\\schema.yml"
+    },
+    {
+      "source": "stg_customers",
+      "target": "stg_customers_test_unique",
+      "type": "HAS_TEST",
+      "file": "D:\\10 ACADAMY KIFIYA\\TRP_Training\\week 4\\brownfield-cartographer\\targets\\jaffle_shop\\models\\staging\\schema.yml"
+    },
+    {
+      "source": "stg_customers",
+      "target": "stg_customers_test_not_null",
+      "type": "HAS_TEST",
+      "file": "D:\\10 ACADAMY KIFIYA\\TRP_Training\\week 4\\brownfield-cartographer\\targets\\jaffle_shop\\models\\staging\\schema.yml"
+    },
+    {
+      "source": "customers",
+      "target": "customers.customer_id",
+      "type": "HAS_COLUMN",
+      "file": "D:\\10 ACADAMY KIFIYA\\TRP_Training\\week 4\\brownfield-cartographer\\targets\\jaffle_shop\\models\\schema.yml"
+    },
+    {
+      "source": "customers",
+      "target": "customers.first_name",
+      "type": "HAS_COLUMN",
+      "file": "D:\\10 ACADAMY KIFIYA\\TRP_Training\\week 4\\brownfield-cartographer\\targets\\jaffle_shop\\models\\schema.yml"
+    },
+    {
+      "source": "customers",
+      "target": "customers.last_name",
+      "type": "HAS_COLUMN",
+      "file": "D:\\10 ACADAMY KIFIYA\\TRP_Training\\week 4\\brownfield-cartographer\\targets\\jaffle_shop\\models\\schema.yml"
+    },
+    {
+      "source": "customers",
+      "target": "customers.first_order",
+      "type": "HAS_COLUMN",
+      "file": "D:\\10 ACADAMY KIFIYA\\TRP_Training\\week 4\\brownfield-cartographer\\targets\\jaffle_shop\\models\\schema.yml"
+    },
+    {
+      "source": "customers",
+      "target": "customers.most_recent_order",
+      "type": "HAS_COLUMN",
+      "file": "D:\\10 ACADAMY KIFIYA\\TRP_Training\\week 4\\brownfield-cartographer\\targets\\jaffle_shop\\models\\schema.yml"
+    },
+    {
+      "source": "customers",
+      "target": "customers.number_of_orders",
+      "type": "HAS_COLUMN",
+      "file": "D:\\10 ACADAMY KIFIYA\\TRP_Training\\week 4\\brownfield-cartographer\\targets\\jaffle_shop\\models\\schema.yml"
+    },
+    {
+      "source": "customers",
+      "target": "customers.total_order_amount",
+      "type": "HAS_COLUMN",
+      "file": "D:\\10 ACADAMY KIFIYA\\TRP_Training\\week 4\\brownfield-cartographer\\targets\\jaffle_shop\\models\\schema.yml"
+    },
+    {
+      "source": "customers",
+      "target": "customers_test_unique",
+      "type": "HAS_TEST",
+      "file": "D:\\10 ACADAMY KIFIYA\\TRP_Training\\week 4\\brownfield-cartographer\\targets\\jaffle_shop\\models\\schema.yml"
+    },
+    {
+      "source": "customers",
+      "target": "customers_test_not_null",
+      "type": "HAS_TEST",
+      "file": "D:\\10 ACADAMY KIFIYA\\TRP_Training\\week 4\\brownfield-cartographer\\targets\\jaffle_shop\\models\\schema.yml"
+    },
+    {
+      "source": "stg_orders",
+      "target": "customers",
+      "type": "DEPENDS_ON",
+      "file": "D:\\10 ACADAMY KIFIYA\\TRP_Training\\week 4\\brownfield-cartographer\\targets\\jaffle_shop\\models\\customers.sql"
+    },
+    {
+      "source": "stg_orders",
+      "target": "orders",
+      "type": "DEPENDS_ON",
+      "file": "D:\\10 ACADAMY KIFIYA\\TRP_Training\\week 4\\brownfield-cartographer\\targets\\jaffle_shop\\models\\orders.sql"
+    },
+    {
+      "source": "stg_orders",
+      "target": "stg_orders.order_id",
+      "type": "HAS_COLUMN",
+      "file": "D:\\10 ACADAMY KIFIYA\\TRP_Training\\week 4\\brownfield-cartographer\\targets\\jaffle_shop\\models\\staging\\schema.yml"
+    },
+    {
+      "source": "stg_orders",
+      "target": "stg_orders.status",
+      "type": "HAS_COLUMN",
+      "file": "D:\\10 ACADAMY KIFIYA\\TRP_Training\\week 4\\brownfield-cartographer\\targets\\jaffle_shop\\models\\staging\\schema.yml"
+    },
+    {
+      "source": "stg_orders",
+      "target": "stg_orders_test_unique",
+      "type": "HAS_TEST",
+      "file": "D:\\10 ACADAMY KIFIYA\\TRP_Training\\week 4\\brownfield-cartographer\\targets\\jaffle_shop\\models\\staging\\schema.yml"
+    },
+    {
+      "source": "stg_orders",
+      "target": "stg_orders_test_not_null",
+      "type": "HAS_TEST",
+      "file": "D:\\10 ACADAMY KIFIYA\\TRP_Training\\week 4\\brownfield-cartographer\\targets\\jaffle_shop\\models\\staging\\schema.yml"
+    },
+    {
+      "source": "stg_orders",
+      "target": "stg_orders_test_{'accepted_values': {'values': ['placed', 'shipped', 'completed', 'return_pending', 'returned']}}",
+      "type": "HAS_TEST",
+      "file": "D:\\10 ACADAMY KIFIYA\\TRP_Training\\week 4\\brownfield-cartographer\\targets\\jaffle_shop\\models\\staging\\schema.yml"
+    },
+    {
+      "source": "stg_payments",
+      "target": "customers",
+      "type": "DEPENDS_ON",
+      "file": "D:\\10 ACADAMY KIFIYA\\TRP_Training\\week 4\\brownfield-cartographer\\targets\\jaffle_shop\\models\\customers.sql"
+    },
+    {
+      "source": "stg_payments",
+      "target": "orders",
+      "type": "DEPENDS_ON",
+      "file": "D:\\10 ACADAMY KIFIYA\\TRP_Training\\week 4\\brownfield-cartographer\\targets\\jaffle_shop\\models\\orders.sql"
+    },
+    {
+      "source": "stg_payments",
+      "target": "stg_payments.payment_id",
+      "type": "HAS_COLUMN",
+      "file": "D:\\10 ACADAMY KIFIYA\\TRP_Training\\week 4\\brownfield-cartographer\\targets\\jaffle_shop\\models\\staging\\schema.yml"
+    },
+    {
+      "source": "stg_payments",
+      "target": "stg_payments.payment_method",
+      "type": "HAS_COLUMN",
+      "file": "D:\\10 ACADAMY KIFIYA\\TRP_Training\\week 4\\brownfield-cartographer\\targets\\jaffle_shop\\models\\staging\\schema.yml"
+    },
+    {
+      "source": "stg_payments",
+      "target": "stg_payments_test_unique",
+      "type": "HAS_TEST",
+      "file": "D:\\10 ACADAMY KIFIYA\\TRP_Training\\week 4\\brownfield-cartographer\\targets\\jaffle_shop\\models\\staging\\schema.yml"
+    },
+    {
+      "source": "stg_payments",
+      "target": "stg_payments_test_not_null",
+      "type": "HAS_TEST",
+      "file": "D:\\10 ACADAMY KIFIYA\\TRP_Training\\week 4\\brownfield-cartographer\\targets\\jaffle_shop\\models\\staging\\schema.yml"
+    },
+    {
+      "source": "stg_payments",
+      "target": "stg_payments_test_{'accepted_values': {'values': ['credit_card', 'coupon', 'bank_transfer', 'gift_card']}}",
+      "type": "HAS_TEST",
+      "file": "D:\\10 ACADAMY KIFIYA\\TRP_Training\\week 4\\brownfield-cartographer\\targets\\jaffle_shop\\models\\staging\\schema.yml"
+    },
+    {
+      "source": "orders",
+      "target": "orders.order_id",
+      "type": "HAS_COLUMN",
+      "file": "D:\\10 ACADAMY KIFIYA\\TRP_Training\\week 4\\brownfield-cartographer\\targets\\jaffle_shop\\models\\schema.yml"
+    },
+    {
+      "source": "orders",
+      "target": "orders.customer_id",
+      "type": "HAS_COLUMN",
+      "file": "D:\\10 ACADAMY KIFIYA\\TRP_Training\\week 4\\brownfield-cartographer\\targets\\jaffle_shop\\models\\schema.yml"
+    },
+    {
+      "source": "orders",
+      "target": "orders.order_date",
+      "type": "HAS_COLUMN",
+      "file": "D:\\10 ACADAMY KIFIYA\\TRP_Training\\week 4\\brownfield-cartographer\\targets\\jaffle_shop\\models\\schema.yml"
+    },
+    {
+      "source": "orders",
+      "target": "orders.status",
+      "type": "HAS_COLUMN",
+      "file": "D:\\10 ACADAMY KIFIYA\\TRP_Training\\week 4\\brownfield-cartographer\\targets\\jaffle_shop\\models\\schema.yml"
+    },
+    {
+      "source": "orders",
+      "target": "orders.amount",
+      "type": "HAS_COLUMN",
+      "file": "D:\\10 ACADAMY KIFIYA\\TRP_Training\\week 4\\brownfield-cartographer\\targets\\jaffle_shop\\models\\schema.yml"
+    },
+    {
+      "source": "orders",
+      "target": "orders.credit_card_amount",
+      "type": "HAS_COLUMN",
+      "file": "D:\\10 ACADAMY KIFIYA\\TRP_Training\\week 4\\brownfield-cartographer\\targets\\jaffle_shop\\models\\schema.yml"
+    },
+    {
+      "source": "orders",
+      "target": "orders.coupon_amount",
+      "type": "HAS_COLUMN",
+      "file": "D:\\10 ACADAMY KIFIYA\\TRP_Training\\week 4\\brownfield-cartographer\\targets\\jaffle_shop\\models\\schema.yml"
+    },
+    {
+      "source": "orders",
+      "target": "orders.bank_transfer_amount",
+      "type": "HAS_COLUMN",
+      "file": "D:\\10 ACADAMY KIFIYA\\TRP_Training\\week 4\\brownfield-cartographer\\targets\\jaffle_shop\\models\\schema.yml"
+    },
+    {
+      "source": "orders",
+      "target": "orders.gift_card_amount",
+      "type": "HAS_COLUMN",
+      "file": "D:\\10 ACADAMY KIFIYA\\TRP_Training\\week 4\\brownfield-cartographer\\targets\\jaffle_shop\\models\\schema.yml"
+    },
+    {
+      "source": "orders",
+      "target": "orders_test_unique",
+      "type": "HAS_TEST",
+      "file": "D:\\10 ACADAMY KIFIYA\\TRP_Training\\week 4\\brownfield-cartographer\\targets\\jaffle_shop\\models\\schema.yml"
+    },
+    {
+      "source": "orders",
+      "target": "orders_test_not_null",
+      "type": "HAS_TEST",
+      "file": "D:\\10 ACADAMY KIFIYA\\TRP_Training\\week 4\\brownfield-cartographer\\targets\\jaffle_shop\\models\\schema.yml"
+    },
+    {
+      "source": "orders",
+      "target": "orders_test_{'relationships': {'to': \"ref('customers')\", 'field': 'customer_id'}}",
+      "type": "HAS_TEST",
+      "file": "D:\\10 ACADAMY KIFIYA\\TRP_Training\\week 4\\brownfield-cartographer\\targets\\jaffle_shop\\models\\schema.yml"
+    },
+    {
+      "source": "orders",
+      "target": "orders_test_{'accepted_values': {'values': ['placed', 'shipped', 'completed', 'return_pending', 'returned']}}",
+      "type": "HAS_TEST",
+      "file": "D:\\10 ACADAMY KIFIYA\\TRP_Training\\week 4\\brownfield-cartographer\\targets\\jaffle_shop\\models\\schema.yml"
+    },
+    {
+      "source": "raw_customers",
+      "target": "stg_customers",
+      "type": "DEPENDS_ON",
+      "file": "D:\\10 ACADAMY KIFIYA\\TRP_Training\\week 4\\brownfield-cartographer\\targets\\jaffle_shop\\models\\staging\\stg_customers.sql"
+    },
+    {
+      "source": "raw_orders",
+      "target": "stg_orders",
+      "type": "DEPENDS_ON",
+      "file": "D:\\10 ACADAMY KIFIYA\\TRP_Training\\week 4\\brownfield-cartographer\\targets\\jaffle_shop\\models\\staging\\stg_orders.sql"
+    },
+    {
+      "source": "raw_payments",
+      "target": "stg_payments",
+      "type": "DEPENDS_ON",
+      "file": "D:\\10 ACADAMY KIFIYA\\TRP_Training\\week 4\\brownfield-cartographer\\targets\\jaffle_shop\\models\\staging\\stg_payments.sql"
+    }
+  ]
+}
