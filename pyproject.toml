@@ -10,26 +10,19 @@ dependencies = [
     "tree-sitter-python>=0.21.0",
     "tree-sitter-sql>=0.3.0",
     "tree-sitter-yaml>=0.6.0",
-    
     # SQL parsing + lineage
     "sqlglot>=23.0.0",
-    
     # Graph algorithms
     "networkx>=3.2.0",
-    
     # Agent orchestration (Navigator - Phase 4)
     "langgraph>=0.0.40",
-    
     # Data validation + schemas
     "pydantic>=2.5.0",
-    
     # LLM + token counting
     "tiktoken>=0.7.0",
     "openai>=1.10.0",
-    
     # Vector search (semantic embeddings)
     "faiss-cpu>=1.7.4",
-    
     # Templating + CLI
     "jinja2>=3.1.0",
     "typer>=0.9.0",
@@ -59,3 +52,9 @@ target-version = "py310"
 python_version = "3.10"
 warn_return_any = true
 warn_unused_configs = true
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+    "pytest-cov>=7.0.0",
+]
