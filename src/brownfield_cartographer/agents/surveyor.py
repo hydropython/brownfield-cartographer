@@ -9,7 +9,7 @@ from typing import Optional, Literal
 from datetime import datetime
 
 import networkx as nx
-from tree_sitter import Language, Parser, Query
+from tree_sitter import Language, Parser, Query, QueryCursor
 from pydantic import ValidationError
 
 import tree_sitter_python
@@ -88,6 +88,22 @@ class SurveyorAgent:
                 return ".".join(candidate_parts)
         return import_path if import_path else None
     
+    def _extract_captures(self, query_text: str, lang, root_node, content: str, target_capture: str) -> list:
+        """Extract captures using cursor.captures() - returns dict {name: [nodes]}."""
+        results = []
+        if not query_text or root_node.child_count == 0:
+            return results
+        try:
+            query = Query(lang, query_text)
+            cursor = QueryCursor(query)
+            captures_dict = cursor.captures(root_node)  # Returns dict: {capture_name: [Node, ...]}
+            if target_capture in captures_dict:
+                for node in captures_dict[target_capture]:
+                    results.append(content[node.start_byte:node.end_byte])
+        except Exception:
+            pass  # Graceful degradation
+        return results
+    
     def analyze_module(self, file_path: Path) -> Optional[ModuleNode]:
         language_name = self._get_language(file_path)
         if not language_name:
@@ -99,42 +115,23 @@ class SurveyorAgent:
             content = file_path.read_text(encoding="utf-8", errors="replace")
             tree = parser.parse(bytes(content, "utf-8"))
             root_node = tree.root_node
-            imports = []
-            import_query = self._load_query(language_name, "imports")
-            if import_query and root_node.child_count > 0:
-                lang = self._languages[file_path.suffix.lower()]
-                query = Query(lang, import_query)
-                for match in query.matches(root_node):
-                    for capture_name, node in match.captures:
-                        if capture_name == "import_path":
-                            import_text = content[node.start_byte:node.end_byte]
-                            resolved = self._resolve_import_path(import_text, file_path, self.repo_path)
-                            if resolved:
-                                imports.append(resolved)
-            exports = []
-            api_query = self._load_query(language_name, "public_api")
-            if api_query and root_node.child_count > 0:
-                lang = self._languages[file_path.suffix.lower()]
-                query = Query(lang, api_query)
-                for match in query.matches(root_node):
-                    for capture_name, node in match.captures:
-                        if capture_name == "name":
-                            exports.append(content[node.start_byte:node.end_byte])
-            class_inheritance = {}
-            class_query = self._load_query(language_name, "classes")
-            if class_query and root_node.child_count > 0:
-                lang = self._languages[file_path.suffix.lower()]
-                query = Query(lang, class_query)
-                current_class = None
-                for match in query.matches(root_node):
-                    for capture_name, node in match.captures:
-                        if capture_name == "class_name":
-                            current_class = content[node.start_byte:node.end_byte]
-                            class_inheritance[current_class] = None
-                            if current_class not in exports:
-                                exports.append(current_class)
-                        elif capture_name == "base_class" and current_class:
-                            class_inheritance[current_class] = content[node.start_byte:node.end_byte]
+            lang = self._languages[file_path.suffix.lower()]
+            
+            # === Extract imports ===
+            import_query_text = self._load_query(language_name, "imports")
+            imports = self._extract_captures(import_query_text, lang, root_node, content, "import_path")
+            imports = [self._resolve_import_path(imp, file_path, self.repo_path) for imp in imports if self._resolve_import_path(imp, file_path, self.repo_path)]
+            
+            # === Extract public API ===
+            api_query_text = self._load_query(language_name, "public_api")
+            exports = self._extract_captures(api_query_text, lang, root_node, content, "name")
+            
+            # === Extract class inheritance ===
+            class_query_text = self._load_query(language_name, "classes")
+            class_captures = self._extract_captures(class_query_text, lang, root_node, content, "class_name")
+            exports.extend([c for c in class_captures if c not in exports])
+            
+            # Compute structural metrics
             rel_path = file_path.relative_to(self.repo_path)
             change_velocity = self.git_analyzer.get_change_velocity(str(rel_path))
             last_modified = self.git_analyzer.get_file_last_modified(str(rel_path))
@@ -143,6 +140,7 @@ class SurveyorAgent:
             lines = [l.strip() for l in content.split("\n") if l.strip()]
             comment_lines = sum(1 for l in lines if l.startswith(("#", "--", "//")))
             comment_ratio = round(comment_lines / len(lines), 3) if lines else 0.0
+            
             return ModuleNode(
                 id=str(rel_path.with_suffix("")).replace("/", ".").replace("\\", "."),
                 symbol_type="Module", file_path=str(rel_path), language=language_name,
@@ -183,12 +181,18 @@ class SurveyorAgent:
                 edge = Edge(source=module.id, target=target_id, edge_type="IMPORTS", confidence_score=1.0, evidence_type="static")
                 self.graph.add_edge(edge)
             self._add_ghost_nodes(module.imports, module.id)
-        # === Hub Detection: In-Degree Centrality (no scipy) ===
+        # === Hub Detection: PageRank (per spec) ===
         if nx_graph.number_of_nodes() > 0:
-            in_degrees = {node: nx_graph.in_degree(node) for node in nx_graph.nodes()}
-            hubs = sorted(in_degrees.items(), key=lambda x: x[1], reverse=True)[:5]
-            self.graph.architectural_hubs = [hub_id for hub_id, degree in hubs if degree > 0]
-        # === Cycle Detection: Strongly Connected Components ===
+            try:
+                pagerank = nx.pagerank(nx_graph, alpha=0.85, max_iter=100)
+                hubs = sorted(pagerank.items(), key=lambda x: x[1], reverse=True)[:5]
+                self.graph.architectural_hubs = [hub_id for hub_id, score in hubs if score > 0.001]
+            except Exception as e:
+                # Fallback to in-degree if PageRank fails
+                self.graph.parse_warnings.append(f"PageRank failed, using in-degree: {e}")
+                in_degrees = {node: nx_graph.in_degree(node) for node in nx_graph.nodes()}
+                hubs = sorted(in_degrees.items(), key=lambda x: x[1], reverse=True)[:5]
+                self.graph.architectural_hubs = [hub_id for hub_id, degree in hubs if degree > 0]
         sccs = list(nx.strongly_connected_components(nx_graph))
         circular_deps = [scc for scc in sccs if len(scc) > 1]
         if circular_deps:
