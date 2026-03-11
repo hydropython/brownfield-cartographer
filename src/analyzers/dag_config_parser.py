@@ -1,166 +1,162 @@
-﻿"""
-DAG Config Parser - YAML AST-based config extraction
+"""DAG Config Parser  Extract dbt YAML configurations as graph edges.
 
-Parses YAML configuration files using proper AST parsing.
-Extracts models, tests, sources, exposures from dbt/YAML configs.
+Confidence Scoring:
+- 1.0: Explicit YAML relationships (schema.yml foreign keys)
+- 1.0: Source definitions (schema.yml sources)
+- 1.0: Test definitions (schema.yml tests)
 """
-
 from pathlib import Path
-from typing import List, Dict, Any, Optional
-import logging
+from typing import Optional, List, Dict
 
-logger = logging.getLogger(__name__)
+try:
+    import yaml
+except ImportError:
+    yaml = None
 
-class DAGConfigParser:
-    """
-    Parse YAML configuration files using AST.
-    
-    Extracts:
-    - Model definitions and configurations
-    - Test definitions
-    - Source definitions
-    - Exposure definitions
-    """
+
+class DagConfigParser:
+    """Extract pipeline topology from dbt YAML config files."""
     
     def __init__(self):
-        self.yaml_available = self._init_yaml()
+        self.parse_warnings = []
     
-    def _init_yaml(self) -> bool:
-        """Initialize YAML parser if available."""
+    def parse_yaml_file(self, file_path: Path) -> dict:
+        """Parse a dbt YAML config file."""
+        result = {
+            "models": [],
+            "sources": [],
+            "tests": [],
+            "relationships": [],
+            "file_path": str(file_path),
+        }
+        
+        if not file_path.exists():
+            return result
+        
+        if yaml is None:
+            self.parse_warnings.append(f"PyYAML not installed, skipping {file_path}")
+            return result
+        
         try:
-            import yaml
-            logger.info("   PyYAML loaded for AST parsing")
-            return True
-        except ImportError:
-            logger.warning("   PyYAML not installed")
-            return False
+            content = file_path.read_text(encoding="utf-8")
+            data = yaml.safe_load(content)
+        except Exception as e:
+            self.parse_warnings.append(f"YAML parse error {file_path}: {e}")
+            return result
+        
+        if not data:
+            return result
+        
+        # schema.yml has: models as LIST of dicts with 'name' key
+        models = data.get("models", [])
+        if isinstance(models, list) and len(models) > 0:
+            if isinstance(models[0], dict) and "name" in models[0]:
+                self._parse_schema_yml(data, result, file_path)
+        
+        return result
     
-    def parse_dbt_schema(self, yaml_file: Path) -> Dict[str, Any]:
-        """
-        Parse dbt schema.yml file using YAML AST.
-        
-        Args:
-            yaml_file: Path to schema.yml file
-        
-        Returns:
-            Dictionary with models, tests, sources extracted
-        """
-        try:
-            with open(yaml_file, "r", encoding="utf-8") as f:
-                content = yaml.safe_load(f)
+    def _parse_schema_yml(self, data: dict, result: dict, file_path: Path) -> None:
+        """Parse schema.yml file (model definitions with columns/tests)."""
+        # Extract models
+        for model in data.get("models", []):
+            if not isinstance(model, dict):
+                continue
+            model_name = model.get("name", "")
+            if not model_name:
+                continue
             
-            elements = {
-                "models": [],
+            result["models"].append({
+                "name": model_name,
+                "file": str(file_path),
+                "columns": [],
                 "tests": [],
-                "sources": [],
-                "exposures": []
-            }
+            })
             
-            if content:
-                # Extract models with columns and tests (AST-based)
-                for model in content.get("models", []):
-                    if isinstance(model, dict):
-                        model_name = list(model.keys())[0] if model else None
-                        if model_name:
-                            model_config = model.get(model_name, {})
-                            columns = model_config.get("columns", [])
-                            
-                            # Extract tests from columns
-                            model_tests = []
-                            for col in columns:
-                                if isinstance(col, dict):
-                                    col_tests = col.get("tests", [])
-                                    model_tests.extend([
-                                        {"column": col.get("name"), "test": t}
-                                        for t in (col_tests if isinstance(col_tests, list) else [])
-                                    ])
-                            
-                            elements["models"].append({
-                                "name": model_name,
-                                "description": model_config.get("description", ""),
-                                "columns": [c.get("name") if isinstance(c, dict) else str(c) for c in columns],
-                                "tests": model_tests
+            for col in model.get("columns", []):
+                if not isinstance(col, dict):
+                    continue
+                col_name = col.get("name", "")
+                if col_name:
+                    result["models"][-1]["columns"].append(col_name)
+                
+                for test in col.get("tests", []):
+                    if isinstance(test, str):
+                        result["models"][-1]["tests"].append({"type": test, "column": col_name})
+                    elif isinstance(test, dict):
+                        test_name = list(test.keys())[0]
+                        result["models"][-1]["tests"].append({
+                            "type": test_name,
+                            "column": col_name,
+                            "config": test[test_name]
+                        })
+                        
+                        if test_name == "relationships":
+                            rel_config = test["relationships"]
+                            to_ref = str(rel_config.get("to", ""))
+                            to_model = to_ref.replace("ref('", "").replace('ref("', "").replace("')", "").replace('")', "")
+                            result["relationships"].append({
+                                "from_model": model_name,
+                                "from_column": col_name,
+                                "to_model": to_model,
+                                "to_column": str(rel_config.get("field", "")),
+                                "file": str(file_path),
                             })
-                
-                # Extract sources (AST-based)
-                for source in content.get("sources", []):
-                    if isinstance(source, dict):
-                        elements["sources"].append({
-                            "name": source.get("name"),
-                            "tables": [t.get("name") for t in source.get("tables", [])]
+        
+        # Extract sources
+        for source in data.get("sources", []):
+            if not isinstance(source, dict):
+                continue
+            source_name = source.get("name", "")
+            for table in source.get("tables", []):
+                if isinstance(table, dict):
+                    table_name = table.get("name", "")
+                    if table_name:
+                        result["sources"].append({
+                            "source_name": source_name,
+                            "table_name": table_name,
+                            "file": str(file_path),
+                            "columns": [c.get("name") for c in table.get("columns", []) if isinstance(c, dict)],
                         })
-                
-                # Extract exposures (AST-based)
-                for exposure in content.get("exposures", []):
-                    if isinstance(exposure, dict):
-                        elements["exposures"].append({
-                            "name": exposure.get("name"),
-                            "type": exposure.get("type"),
-                            "owner": exposure.get("owner", {}).get("email", "")
-                        })
-            
-            logger.info(f"  Parsed {yaml_file.name}: {len(elements['models'])} models, {len(elements['sources'])} sources via YAML AST")
-            
-            return {
-                "file": str(yaml_file),
-                "type": "dbt_schema",
-                "elements": elements,
-                "parse_method": "yaml-ast"
-            }
-        
-        except Exception as e:
-            logger.warning(f"Failed to parse {yaml_file}: {e}")
-            return {
-                "file": str(yaml_file),
-                "type": "dbt_schema",
-                "error": str(e),
-                "elements": {},
-                "recoverable": True
-            }
     
-    def parse_dbt_project(self, yaml_file: Path) -> Dict[str, Any]:
-        """Parse dbt_project.yml file using YAML AST."""
-        try:
-            with open(yaml_file, "r", encoding="utf-8") as f:
-                content = yaml.safe_load(f)
-            
-            return {
-                "file": str(yaml_file),
-                "type": "dbt_project",
-                "name": content.get("name", "unknown") if content else "unknown",
-                "version": content.get("version", "1.0.0") if content else "1.0.0",
-                "profile": content.get("profile", "") if content else "",
-                "parse_method": "yaml-ast"
-            }
-        except Exception as e:
-            logger.warning(f"Failed to parse {yaml_file}: {e}")
-            return {
-                "file": str(yaml_file),
-                "type": "dbt_project",
-                "error": str(e),
-                "parse_method": "failed"
-            }
-    
-    def analyze_directory(self, repo_path: Path) -> List[Dict[str, Any]]:
-        """Analyze all YAML files in directory with progress reporting."""
-        from tqdm import tqdm
+    def get_config_edges(self, file_path: Path) -> list[dict]:
+        """Convert parsed YAML config to edge format."""
+        edges = []
+        result = self.parse_yaml_file(file_path)
         
-        yaml_files = list(repo_path.rglob("*.yml")) + list(repo_path.rglob("*.yaml"))
-        results = []
+        # Relationship edges (foreign keys) - HIGH CONFIDENCE (1.0)
+        for rel in result["relationships"]:
+            edges.append({
+                "source": rel["to_model"],
+                "target": rel["from_model"],
+                "type": "RELATIONSHIP",
+                "subtype": "foreign_key",
+                "from_column": rel["from_column"],
+                "to_column": rel["to_column"],
+                "file": rel["file"],
+                "confidence": 1.0,
+            })
         
-        logger.info(f"Analyzing {len(yaml_files)} YAML files...")
+        # Source edges - HIGH CONFIDENCE (1.0)
+        for src in result["sources"]:
+            edges.append({
+                "source": f"{src['source_name']}.{src['table_name']}",
+                "target": src["table_name"],
+                "type": "SOURCES",
+                "file": src["file"],
+                "confidence": 1.0,
+            })
         
-        for yaml_file in tqdm(yaml_files, desc="YAML files"):
-            if "node_modules" not in str(yaml_file) and ".git" not in str(yaml_file):
-                filename = yaml_file.name.lower()
-                
-                if filename == "dbt_project.yml":
-                    result = self.parse_dbt_project(yaml_file)
-                elif "schema" in filename:
-                    result = self.parse_dbt_schema(yaml_file)
-                else:
-                    result = {"file": str(yaml_file), "type": "unknown", "parse_method": "skipped"}
-                
-                results.append(result)
+        # Test edges - HIGH CONFIDENCE (1.0)
+        for model in result["models"]:
+            for test in model.get("tests", []):
+                edges.append({
+                    "source": model["name"],
+                    "target": f"{model['name']}_test_{test['type']}_{test['column']}",
+                    "type": "TESTS",
+                    "subtype": test["type"],
+                    "column": test["column"],
+                    "file": model["file"],
+                    "confidence": 1.0,
+                })
         
-        return results
+        return edges
