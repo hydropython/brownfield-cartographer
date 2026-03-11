@@ -160,7 +160,7 @@ http://127.0.0.1:8002
 {"name": "Hydrologist", "nodes": 31, "edges": 37, "confidence_high": 29, "confidence_medium": 8}
 
 ## Project Structure
-
+```
 brownfield-cartographer/
 ├── backend/api.py
 ├── frontend/index.html
@@ -170,6 +170,7 @@ brownfield-cartographer/
 ├── src/agents/hydrologist.py
 ├── targets/jaffle_shop/
 └── README.md
+```
 
 ## Known Limitations
 
