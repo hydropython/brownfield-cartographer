@@ -1,5 +1,5 @@
 ﻿from pydantic import BaseModel, Field
-from typing import Optional, List, Literal, Union
+from typing import Optional, List, Literal, Union, Dict, Any
 from datetime import datetime
 from enum import Enum
 
@@ -25,6 +25,12 @@ class SymbolType(str, Enum):
     CONFIG = "Config"
     EXTERNAL = "External"
 
+class StorageType(str, Enum):
+    TABLE = "table"
+    FILE = "file"
+    STREAM = "stream"
+    API = "api"
+
 # === Base Node ===
 
 class BaseNode(BaseModel):
@@ -34,19 +40,19 @@ class BaseNode(BaseModel):
     confidence_score: float = 1.0
     evidence_type: EvidenceType = EvidenceType.STATIC
 
-# === Node Types ===
+# === ModuleNode (Surveyor) - ALL required fields ===
 
 class ModuleNode(BaseNode):
-    """Module node per Surveyor spec."""
+    """Module node per Surveyor spec - ALL required fields."""
     symbol_type: SymbolType = SymbolType.MODULE
-    path: str = ""
-    language: str = "python"
-    purpose_statement: Optional[str] = None
-    domain_cluster: Optional[str] = None
-    complexity_score: float = 0.0
-    change_velocity_30d: int = 0
-    is_dead_code_candidate: bool = False
-    last_modified: Optional[datetime] = None
+    path: str = ""                                    #  Required
+    language: str = "python"                          #  Required
+    purpose_statement: Optional[str] = None           #  Required (LLM Phase 3)
+    domain_cluster: Optional[str] = None              #  Required (infer from path)
+    complexity_score: float = 0.0                     #  Required (LOC/cyclomatic)
+    change_velocity_30d: int = 0                      #  Required (git commits)
+    is_dead_code_candidate: bool = False              #  Required
+    last_modified: Optional[datetime] = None          #  Required (file mtime)
     imports: List[str] = []
     exports: List[str] = []
     in_degree: int = 0
@@ -57,35 +63,41 @@ class ModuleNode(BaseNode):
     is_ghost_node: bool = False
     external_package: Optional[str] = None
 
+# === DatasetNode (Hydrologist) - ALL required fields ===
+
 class DatasetNode(BaseNode):
-    """Dataset node per spec."""
+    """Dataset node per Hydrologist spec - ALL required fields."""
     symbol_type: SymbolType = SymbolType.DATASET
-    name: str = ""
-    storage_type: Literal["table", "file", "stream", "api"] = "table"
-    schema_snapshot: Optional[dict] = None
-    freshness_sla: Optional[str] = None
-    owner: Optional[str] = None
-    is_source_of_truth: bool = False
+    name: str = ""                                    #  Required
+    storage_type: StorageType = StorageType.FILE      #  Required
+    schema_snapshot: Optional[Dict[str, Any]] = None  #  Required (from YAML)
+    freshness_sla: Optional[str] = None               #  Required
+    owner: Optional[str] = None                       #  Required
+    is_source_of_truth: bool = False                  #  Required (seeds=True)
+
+# === FunctionNode (Future) - ALL required fields ===
 
 class FunctionNode(BaseNode):
-    """Function node per spec."""
+    """Function node - ALL required fields."""
     symbol_type: SymbolType = SymbolType.FUNCTION
-    qualified_name: str = ""
-    parent_module: str = ""
-    signature: str = ""
-    purpose_statement: Optional[str] = None
-    call_count_within_repo: int = 0
-    is_public_api: bool = True
+    qualified_name: str = ""                          #  Required
+    parent_module: str = ""                           #  Required
+    signature: str = ""                               #  Required
+    purpose_statement: Optional[str] = None           #  Required (LLM Phase 3)
+    call_count_within_repo: int = 0                   #  Required
+    is_public_api: bool = True                        #  Required
+
+# === TransformationNode (Hydrologist) - ALL required fields ===
 
 class TransformationNode(BaseNode):
-    """Transformation node per spec."""
+    """Transformation node - ALL required fields."""
     symbol_type: SymbolType = SymbolType.TRANSFORMATION
-    source_datasets: List[str] = []
-    target_datasets: List[str] = []
-    transformation_type: str = "sql"
-    source_file: str = ""
-    line_range: tuple = (0, 0)
-    sql_query_if_applicable: Optional[str] = None
+    source_datasets: List[str] = []                   #  Required
+    target_datasets: List[str] = []                   #  Required
+    transformation_type: str = "sql"                  #  Required
+    source_file: str = ""                             #  Required
+    line_range: tuple = (0, 0)                        #  Required
+    sql_query_if_applicable: Optional[str] = None     #  Required
 
 # === Graph Container ===
 

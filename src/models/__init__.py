@@ -1,11 +1,13 @@
 ﻿from .nodes import (
-    ModuleNode, DatasetNode, FunctionNode, TransformationNode,
-    CartographyGraph, ConfidenceTier, EvidenceType, SymbolType
+    BaseNode, ModuleNode, DatasetNode, FunctionNode, 
+    TransformationNode, CartographyGraph, 
+    ConfidenceTier, EvidenceType, SymbolType, StorageType
 )
 from .edges import Edge, EdgeType
 
 __all__ = [
-    "ModuleNode", "DatasetNode", "FunctionNode", "TransformationNode",
-    "CartographyGraph", "ConfidenceTier", "EvidenceType", "SymbolType",
+    "BaseNode", "ModuleNode", "DatasetNode", "FunctionNode", 
+    "TransformationNode", "CartographyGraph", 
+    "ConfidenceTier", "EvidenceType", "SymbolType", "StorageType",
     "Edge", "EdgeType"
 ]
