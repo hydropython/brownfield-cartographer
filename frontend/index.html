@@ -1,0 +1,121 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Brownfield Cartographer  Professional Dashboard</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="css/styles.css"><link rel="stylesheet" href="css/legend.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.28.1/cytoscape.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+</head>
+<body>
+    <header class="academic-header">
+        <div class="header-content">
+            <div class="logo"><i class="fas fa-project-diagram"></i><h1>Brownfield Cartographer</h1></div>
+            <div class="metadata"><span class="badge">v0.1.0</span><span class="repo">jaffle_shop</span><span class="timestamp" id="timestamp">-</span></div>
+        </div>
+    </header>
+
+    <nav class="agent-tabs">
+        <button class="tab-btn active" data-tab="overview"><i class="fas fa-home"></i> Overview</button>
+        <button class="tab-btn" data-tab="surveyor"><i class="fas fa-sitemap"></i> Agent 1: Surveyor</button>
+        <button class="tab-btn" data-tab="hydrologist"><i class="fas fa-water"></i> Agent 2: Hydrologist</button>
+        <button class="tab-btn" data-tab="methodology"><i class="fas fa-book"></i> Methodology</button>
+    </nav>
+
+    <main class="dashboard">
+        <!-- Overview Tab -->
+        <section id="overview" class="tab-content active">
+            <div class="summary-cards">
+                <div class="card"><h3><i class="fas fa-sitemap"></i> Surveyor</h3><div class="metric"><span id="s-nodes">-</span> nodes</div><div class="metric"><span id="s-edges">-</span> edges</div><div class="confidence high">100% high confidence</div></div>
+                <div class="card"><h3><i class="fas fa-water"></i> Hydrologist</h3><div class="metric"><span id="h-nodes">-</span> nodes</div><div class="metric"><span id="h-edges">-</span> edges</div><div class="confidence" id="h-conf">-</div></div>
+                <div class="card"><h3><i class="fas fa-bullseye"></i> Key Insights</h3><ul class="insights"><li> Seeds correctly identified</li><li> CTE hallucination resolved</li><li> Blast radius: 17 downstream</li></ul></div>
+            </div>
+            <div class="quick-actions">
+                <button class="btn-primary" onclick="switchTab('surveyor')"><i class="fas fa-eye"></i> View Surveyor</button>
+                <button class="btn-primary" onclick="switchTab('hydrologist')"><i class="fas fa-eye"></i> View Hydrologist</button>
+                <button class="btn-secondary" onclick="exportData()"><i class="fas fa-download"></i> Export</button>
+            </div>
+        </section>
+
+        <!-- Surveyor Tab -->
+        <section id="surveyor" class="tab-content">
+            <div class="agent-header"><h2>Agent 1: Surveyor  Static Structure Analysis</h2><p>Extracts module dependencies, imports, exports, and architectural hubs.</p></div>
+            <div class="viz-container">
+                <div class="viz-header">
+                    <div class="viz-title"><i class="fas fa-project-diagram"></i> Module Dependency Graph</div>
+                    <div class="viz-controls">
+                        <button class="btn-small" onclick="resetViz('surveyor')"><i class="fas fa-expand"></i> Reset View</button>
+                    </div>
+                </div>
+                <div id="surveyor-viz" class="graph-viz"></div>
+                <div id="surveyor-legend" class="color-legend"></div>
+            </div>
+            <div class="stats-panel"><h3>Statistics</h3><div class="stats-grid"><div class="stat-item"><label>Architectural Hubs</label><ul id="s-hubs" class="hub-list"></ul></div><div class="stat-item"><label>Edge Types</label><canvas id="s-chart" width="200" height="200"></canvas></div></div></div>
+        </section>
+
+        <!-- Hydrologist Tab -->
+        <section id="hydrologist" class="tab-content">
+            <div class="agent-header"><h2>Agent 2: Hydrologist  Data Lineage Analysis</h2><p>Extracts data dependencies from SQL, YAML, and dbt patterns with confidence scoring.</p></div>
+            <div class="viz-container">
+                <div class="viz-header">
+                    <div class="viz-title"><i class="fas fa-water"></i> Data Lineage Graph</div>
+                    <div class="viz-controls">
+                        <button class="btn-small" onclick="resetViz('hydrologist')"><i class="fas fa-expand"></i> Reset View</button>
+                        <button class="btn-small" onclick="filterHighConf()"><i class="fas fa-filter"></i> High Confidence Only</button>
+                    </div>
+                </div>
+                <div id="hydrologist-viz" class="graph-viz"></div>
+                <div id="hydrologist-legend" class="color-legend"></div>
+            </div>
+            <div class="stats-panel"><h3>Lineage Statistics</h3><div class="stats-grid"><div class="stat-item"><label>Edge Breakdown</label><canvas id="h-edge-chart" width="200" height="200"></canvas></div><div class="stat-item"><label>Confidence</label><canvas id="h-conf-chart" width="200" height="200"></canvas></div><div class="stat-item"><label>Blast Radius</label><div class="blast-info"><select id="blast-target" onchange="updateBlast()"><option value="raw_customers">raw_customers</option><option value="raw_orders">raw_orders</option><option value="raw_payments">raw_payments</option></select><div id="blast-result">Loading...</div></div></div></div></div>
+        </section>
+
+        <!-- Methodology Tab -->
+        <section id="methodology" class="tab-content">
+            <div class="methodology-content">
+                <h2>Methodology & Technical Details</h2>
+                <article class="method-section">
+                    <h3><i class="fas fa-microscope"></i> Edge Extraction Methods</h3>
+                    <table class="method-table">
+                        <thead><tr><th>Edge Type</th><th>Method</th><th>Confidence</th><th>Evidence</th></tr></thead>
+                        <tbody>
+                            <tr><td><code>DBT_REF</code></td><td>Regex: <code>{{ ref() }}</code></td><td><span class="badge high">1.0</span></td><td>Explicit dbt syntax</td></tr>
+                            <tr><td><code>DEPENDS_ON</code></td><td>SQLGlot AST parsing</td><td><span class="badge medium">0.8</span></td><td>FROM/JOIN/CTE</td></tr>
+                            <tr><td><code>RELATIONSHIP</code></td><td>YAML schema.yml</td><td><span class="badge high">1.0</span></td><td>Foreign key tests</td></tr>
+                            <tr><td><code>TESTS</code></td><td>YAML schema.yml</td><td><span class="badge high">1.0</span></td><td>not_null, unique</td></tr>
+                        </tbody>
+                    </table>
+                </article>
+                <article class="method-section">
+                    <h3><i class="fas fa-shield-alt"></i> Confidence Framework</h3>
+                    <ul class="confidence-legend">
+                        <li><span class="badge high">High (0.9)</span>: Explicit syntax (dbt refs, YAML)</li>
+                        <li><span class="badge medium">Medium (0.6-0.9)</span>: Parsed SQL patterns</li>
+                        <li><span class="badge low">&lt;0.6</span>: Heuristic fallback (unused)</li>
+                    </ul>
+                </article>
+                <article class="method-section">
+                    <h3><i class="fas fa-book"></i> References</h3>
+                    <ol class="references">
+                        <li>Brin & Page (1998). PageRank. <em>Computer Networks</em>.</li>
+                        <li>Nielson et al. (2015). <em>Principles of Program Analysis</em>. Springer.</li>
+                        <li>dbt Labs. (2024). <em>dbt Core Documentation</em>.</li>
+                    </ol>
+                </article>
+            </div>
+        </section>
+    </main>
+
+    <footer class="academic-footer">
+        <div class="footer-content">
+            <p><strong>Brownfield Cartographer</strong> v0.1.0  Research prototype for automated codebase intelligence.</p>
+            <p class="citation">Cite: <code>Cartographer v0.1.0 [Software]. (2026). https://github.com/your-org/brownfield-cartographer</code></p>
+        </div>
+    </footer>
+
+    <script src="js/app.js"></script>
+</body>
+</html>
+

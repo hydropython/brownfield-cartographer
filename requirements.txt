@@ -1,0 +1,8 @@
+﻿# Backend Dependencies
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+
+# Frontend: Served statically, no build step required
+# Visualization libraries loaded via CDN:
+# - Cytoscape.js 3.28.1
+# - Chart.js 4.4.0
