@@ -2,7 +2,7 @@
 
 Merges 6 analyzers for 100% spec compliance:
 1. SQLLineageAnalyzer (sqlglot)  SQL/dbt table dependencies
-2. DagConfigParser (dbt YAML)  dbt schema.yml configs
+2. DAGConfigParser (dbt YAML)  dbt schema.yml configs
 3. PythonDataFlowAnalyzer  pandas, SQLAlchemy, PySpark operations
 4. NotebookParser  Jupyter .ipynb data references
 5. AirflowDagParser  Airflow DAG pipeline topology
@@ -14,7 +14,7 @@ import json
 import networkx as nx
 
 from ..analyzers.sql_lineage import SQLLineageAnalyzer
-from ..analyzers.dag_config_parser import DagConfigParser
+from ..analyzers.dag_config_parser import DAGConfigParser
 from ..analyzers.python_dataflow import PythonDataFlowAnalyzer
 from ..analyzers.notebook_parser import NotebookParser
 from ..analyzers.airflow_dag_parser import AirflowDagParser
@@ -37,7 +37,7 @@ class HydrologistAgent:
         
         # Initialize all 6 analyzers
         self.sql_analyzer = SQLLineageAnalyzer(dialect=sql_dialect)
-        self.config_parser = DagConfigParser()
+        self.config_parser = DAGConfigParser()
         self.python_analyzer = PythonDataFlowAnalyzer()
         self.notebook_parser = NotebookParser()
         self.airflow_parser = AirflowDagParser()
@@ -207,4 +207,5 @@ class HydrologistAgent:
             json.dump(data, f, indent=2, default=str)
         
         return output_path
+
 

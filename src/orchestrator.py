@@ -1,63 +1,131 @@
-﻿"""Orchestrator  Wires agents in sequence, serializes outputs.
+﻿"""
+Orchestrator - Wires Surveyor + Hydrologist in sequence
 
-Pipeline: Surveyor -> Hydrologist -> Semanticist -> Archivist
+Serializes outputs to .cartography/ directory.
+Includes robust error handling and logging.
 """
+
 from pathlib import Path
-from typing import Optional
+from typing import List, Dict, Any
+import logging
+from tqdm import tqdm
 
-from agents.surveyor import SurveyorAgent
-from agents.hydrologist import HydrologistAgent
-# from agents.semanticist import SemanticistAgent  # TASK-009
-# from agents.archivist import ArchivistAgent      # TASK-010
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+from .agents.surveyor import SurveyorAgent
+from .agents.hydrologist import HydrologistAgent
 
 
-def run_pipeline(
+def run_analysis(
     repo_path: Path,
-    output_dir: Path = Path(".cartography"),
-    incremental: bool = False,
-    days_lookback: int = 30,
-) -> dict[str, Path]:
-    """Run full analysis pipeline and return artifact paths."""
+    output_dir: Path,
+    agents: List[str] = None,
+    verbose: bool = False
+) -> Dict[str, Any]:
+    """
+    Run analysis pipeline on repository with error isolation.
+    
+    Args:
+        repo_path: Path to repository
+        output_dir: Output directory for artifacts
+        agents: List of agents to run
+        verbose: Enable verbose output
+    
+    Returns:
+        Dictionary with analysis results
+    """
+    if verbose:
+        logging.getLogger().setLevel(logging.DEBUG)
+    
+    if agents is None:
+        agents = ["surveyor", "hydrologist"]
+    
+    # Create output directory
     output_dir.mkdir(parents=True, exist_ok=True)
-    artifacts = {}
     
-    # === Phase 1: Surveyor (Static Structure) ===
-    print("[1/4] Running Surveyor Agent...")
-    surveyor = SurveyorAgent(repo_path=repo_path, output_dir=output_dir, days_lookback=days_lookback)
-    module_graph = surveyor.run(include_tests=False)
-    artifacts["module_graph"] = surveyor.save_artifacts()
-    print(f"   Module graph: {artifacts['module_graph']} ({module_graph.total_nodes} nodes, {module_graph.total_edges} edges)")
+    results = {
+        "repo_path": str(repo_path),
+        "agents_run": agents,
+        "artifacts": [],
+        "errors": [],
+        "warnings": []
+    }
     
-    # === Phase 2: Hydrologist (Data Lineage) ===
-    print("[2/4] Running Hydrologist Agent...")
-    hydrologist = HydrologistAgent(repo_path=repo_path, output_dir=output_dir)
-    lineage_graph = hydrologist.run(module_graph=module_graph)
-    artifacts["lineage_graph"] = hydrologist.save_artifacts()
-    print(f"   Lineage graph: {artifacts['lineage_graph']}")
+    # Run Surveyor Agent with error isolation
+    if "surveyor" in agents:
+        try:
+            logger.info("[1/2] Running Surveyor Agent...")
+            logger.info(f"  Repository: {repo_path}")
+            
+            surveyor = SurveyorAgent(repo_path=repo_path)
+            graph = surveyor.run()
+            
+            # Save module graph
+            output_path = output_dir / "module_graph.json"
+            graph.to_file(output_path)
+            results["artifacts"].append(str(output_path))
+            results["surveyor"] = {
+                "nodes": graph.total_nodes,
+                "edges": graph.total_edges,
+                "hubs": graph.architectural_hubs,
+                "warnings": getattr(graph, "parse_warnings", [])
+            }
+            
+            logger.info(f"   Module Graph: {graph.total_nodes} nodes, {graph.total_edges} edges")
+            logger.info(f"   Saved to: {output_path}")
+            
+        except Exception as e:
+            logger.error(f"Surveyor Agent failed: {e}")
+            results["errors"].append({"agent": "surveyor", "error": str(e)})
+            results["warnings"].append(f"Surveyor analysis incomplete: {e}")
     
-    # === Phase 3: Semanticist (LLM Enrichment)  TASK-009 ===
-    # print("[3/4] Running Semanticist Agent...")
-    # semanticist = SemanticistAgent(repo_path=repo_path, output_dir=output_dir)
-    # semanticist.enrich(module_graph, lineage_graph)
-    # artifacts["semantic_enrichment"] = semanticist.save_artifacts()
+    # Run Hydrologist Agent with error isolation
+    if "hydrologist" in agents:
+        try:
+            logger.info("[2/2] Running Hydrologist Agent...")
+            
+            hydrologist = HydrologistAgent(repo_path=repo_path)
+            graph = hydrologist.run()
+            
+            # Save lineage graph
+            output_path = output_dir / "lineage_graph.json"
+            
+            import json
+            with open(output_path, "w") as f:
+                json.dump({
+                    "nodes": graph.total_nodes,
+                    "edges": len(getattr(hydrologist, "lineage_edges", [])),
+                    "edges_detail": getattr(hydrologist, "lineage_edges", [])
+                }, f, indent=2)
+            
+            results["artifacts"].append(str(output_path))
+            results["hydrologist"] = {
+                "nodes": graph.total_nodes,
+                "edges": len(getattr(hydrologist, "lineage_edges", [])),
+                "warnings": []
+            }
+            
+            logger.info(f"   Lineage Graph: {graph.total_nodes} nodes, {len(getattr(hydrologist, 'lineage_edges', []))} edges")
+            logger.info(f"   Saved to: {output_path}")
+            
+        except Exception as e:
+            logger.error(f"Hydrologist Agent failed: {e}")
+            results["errors"].append({"agent": "hydrologist", "error": str(e)})
+            results["warnings"].append(f"Hydrologist analysis incomplete: {e}")
     
-    # === Phase 4: Archivist (Documentation)  TASK-010 ===
-    # print("[4/4] Running Archivist Agent...")
-    # archivist = ArchivistAgent(repo_path=repo_path, output_dir=output_dir)
-    # artifacts["codebase_md"] = archivist.generate_codebase_md(module_graph, lineage_graph)
-    # artifacts["onboarding_brief"] = archivist.generate_onboarding_brief()
+    # Log summary
+    logger.info()
+    logger.info("=" * 60)
+    logger.info("PIPELINE SUMMARY")
+    logger.info("=" * 60)
+    logger.info(f"Agents run: {len(agents)}")
+    logger.info(f"Artifacts generated: {len(results['artifacts'])}")
+    logger.info(f"Errors: {len(results['errors'])}")
+    logger.info(f"Warnings: {len(results['warnings'])}")
     
-    print(f"\n Pipeline complete. Artifacts in {output_dir}")
-    return artifacts
-
-
-if __name__ == "__main__":
-    import sys
-    if len(sys.argv) < 2:
-        print("Usage: python orchestrator.py <repo_path> [--output <dir>]")
-        sys.exit(1)
-    
-    repo_path = Path(sys.argv[1])
-    output_dir = Path(sys.argv[3]) if len(sys.argv) > 3 else Path(".cartography")
-    
-    run_pipeline(repo_path, output_dir)
+    return results
