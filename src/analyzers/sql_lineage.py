@@ -1,155 +1,178 @@
-"""SQL Lineage Analyzer  sqlglot-based table dependency extraction.
+﻿"""
+SQL Lineage Analyzer - sqlglot-based SQL dependency extraction
 
-Extracts:
-- Source tables (FROM, JOIN clauses)
-- Target tables (INSERT, CREATE, MERGE)
-- CTEs (Common Table Expressions)
-- dbt ref() and source() function calls
+Uses sqlglot to parse SQL and extract table-level dependencies from
+SELECT, FROM, JOIN, WITH (CTE) clauses.
 """
+
 from pathlib import Path
-from typing import Optional
-import sqlglot
-from sqlglot import exp
-import re
+from typing import List, Dict, Any, Optional, Set
 
-
-class SqlLineageAnalyzer:
-    """Extract table dependencies from SQL files using sqlglot."""
+class SQLLineageAnalyzer:
+    """
+    Extract SQL dependencies using sqlglot.
+    
+    Parses SQL files and extracts:
+    - Table references (FROM, JOIN)
+    - CTE definitions (WITH clauses)
+    - Column-level lineage
+    - dbt ref() and source() calls
+    """
     
     def __init__(self, dialect: str = "postgres"):
+        """
+        Initialize SQL analyzer.
+        
+        Args:
+            dialect: SQL dialect for parsing (postgres, mysql, bigquery, etc.)
+        """
         self.dialect = dialect
+        self.sqlglot_available = self._init_sqlglot()
     
-    def parse_sql_file(self, file_path: Path) -> dict:
-        """Parse a SQL file and extract lineage information."""
-        result = {
-            "source_tables": [],
-            "target_tables": [],
-            "cte_tables": [],
-            "dbt_refs": [],
-            "dbt_sources": [],
-            "file_path": str(file_path),
-        }
-        
-        if not file_path.exists():
-            return result
-        
+    def _init_sqlglot(self) -> bool:
+        """Initialize sqlglot if available."""
         try:
-            content = file_path.read_text(encoding="utf-8")
-        except Exception:
-            return result
+            import sqlglot
+            from sqlglot import exp
+            print("   sqlglot loaded")
+            return True
+        except ImportError:
+            print("   sqlglot not installed (using regex fallback)")
+            return False
+    
+    def extract_dependencies(self, sql_file: Path) -> Dict[str, Any]:
+        """
+        Extract dependencies from SQL file.
         
-        # Extract dbt ref() calls: {{ ref('table_name') }}
-        ref_pattern = r"\{\{\s*ref\s*\(\s*['\"]([^'\"]+)['\"]\s*\)\s*\}\}"
-        for match in re.finditer(ref_pattern, content):
-            result["dbt_refs"].append(match.group(1))
-        
-        # Extract dbt source() calls: {{ source('schema', 'table') }}
-        source_pattern = r"\{\{\s*source\s*\(\s*['\"]([^'\"]+)['\"]\s*,\s*['\"]([^'\"]+)['\"]\s*\)\s*\}\}"
-        for match in re.finditer(source_pattern, content):
-            result["dbt_sources"].append({
-                "schema": match.group(1),
-                "table": match.group(2),
-            })
-        
-        # Parse SQL with sqlglot
+        Uses sqlglot for proper AST parsing, falls back to regex.
+        """
         try:
-            statements = sqlglot.parse(content, dialect=self.dialect)
+            with open(sql_file, "r", encoding="utf-8") as f:
+                content = f.read()
             
-            for stmt in statements:
-                if stmt is None:
-                    continue
-                
-                # Extract target tables (INSERT, CREATE, MERGE)
-                if isinstance(stmt, exp.Insert):
-                    target = stmt.find(exp.Table)
-                    if target and target.name:
-                        result["target_tables"].append(target.name)
-                
-                elif isinstance(stmt, exp.Create):
-                    target = stmt.find(exp.Table)
-                    if target and target.name:
-                        result["target_tables"].append(target.name)
-                    select = stmt.find(exp.Select)
-                    if select:
-                        self._extract_source_tables(select, result)
-                
-                elif isinstance(stmt, exp.Select):
-                    self._extract_source_tables(stmt, result)
-                
-                elif isinstance(stmt, exp.Merge):
-                    target = stmt.find(exp.Table)
-                    if target and target.name:
-                        result["target_tables"].append(target.name)
-                    self._extract_source_tables(stmt, result)
+            # Extract dbt macros first (ref(), source())
+            dbt_refs = self._extract_dbt_refs(content)
+            dbt_sources = self._extract_dbt_sources(content)
+            
+            # Use sqlglot for SQL parsing if available
+            if self.sqlglot_available:
+                return self._parse_with_sqlglot(sql_file, content, dbt_refs, dbt_sources)
+            else:
+                return self._parse_with_regex(sql_file, content, dbt_refs, dbt_sources)
         
-        except Exception:
-            pass  # Graceful degradation
-        
-        # Deduplicate
-        result["source_tables"] = list(set(result["source_tables"]))
-        result["target_tables"] = list(set(result["target_tables"]))
-        result["cte_tables"] = list(set(result["cte_tables"]))
-        
-        return result
+        except Exception as e:
+            return {
+                "file": str(sql_file),
+                "error": str(e),
+                "tables": [],
+                "ctes": [],
+                "dependencies": []
+            }
     
-    def _extract_source_tables(self, statement, result: dict) -> None:
-        """Extract all source tables from a SELECT statement."""
-        for table in statement.find_all(exp.Table):
-            if table.name and table.name not in result["cte_tables"]:
-                result["source_tables"].append(table.name)
+    def _parse_with_sqlglot(self, sql_file: Path, content: str, dbt_refs: List[str], dbt_sources: List[str]) -> Dict[str, Any]:
+        """Parse SQL using sqlglot AST."""
+        import sqlglot
+        from sqlglot import exp
         
-        with_clause = statement.find(exp.With)
-        if with_clause:
-            for cte in with_clause.find_all(exp.CTE):
+        try:
+            # Remove dbt macros for clean SQL parsing
+            clean_sql = self._remove_dbt_macros(content)
+            
+            # Parse SQL
+            parsed = sqlglot.parse_one(clean_sql, dialect=self.dialect, read=self.dialect)
+            
+            # Extract tables from FROM/JOIN clauses
+            tables: Set[str] = set()
+            for table in parsed.find_all(exp.Table):
+                if table.name:
+                    tables.add(table.name)
+            
+            # Extract CTEs
+            ctes: Set[str] = set()
+            for cte in parsed.find_all(exp.CTE):
                 if cte.alias:
-                    result["cte_tables"].append(cte.alias)
+                    ctes.add(cte.alias)
+            
+            # Extract columns for column-level lineage
+            columns: Set[str] = set()
+            for col in parsed.find_all(exp.Column):
+                columns.add(str(col))
+            
+            # Combine all dependencies
+            all_deps = list(tables) + dbt_refs + dbt_sources
+            
+            return {
+                "file": str(sql_file),
+                "tables": list(tables),
+                "ctes": list(ctes),
+                "columns": list(columns),
+                "dbt_refs": dbt_refs,
+                "dbt_sources": dbt_sources,
+                "dependencies": all_deps,
+                "parse_method": "sqlglot"
+            }
         
-        for join in statement.find_all(exp.Join):
-            table = join.find(exp.Table)
-            if table and table.name and table.name not in result["cte_tables"]:
-                result["source_tables"].append(table.name)
+        except Exception as e:
+            # Fallback to regex on parse error
+            return self._parse_with_regex(sql_file, content, dbt_refs, dbt_sources)
     
-    def get_lineage_edges(self, file_path: Path) -> list[dict]:
-        """Convert parsed lineage to edge format for graph."""
-        edges = []
-        parsed = self.parse_sql_file(file_path)
-        model_name = file_path.stem
+    def _parse_with_regex(self, sql_file: Path, content: str, dbt_refs: List[str], dbt_sources: List[str]) -> Dict[str, Any]:
+        """Fallback regex-based SQL parsing."""
+        import re
         
-        # Source tables -> this model (READS edges)
-        for table in parsed["source_tables"]:
-            edges.append({
-                "source": table,
-                "target": model_name,
-                "type": "READS",
-                "file": str(file_path),
-            })
+        # Extract tables from FROM clause
+        tables = re.findall(r'FROM\s+["\']?(\w+)["\']?', content, re.IGNORECASE)
         
-        # This model -> target tables (WRITES edges)
-        for table in parsed["target_tables"]:
-            edges.append({
-                "source": model_name,
-                "target": table,
-                "type": "WRITES",
-                "file": str(file_path),
-            })
+        # Extract tables from JOIN clause
+        joins = re.findall(r'JOIN\s+["\']?(\w+)["\']?', content, re.IGNORECASE)
         
-        # dbt refs -> this model (DEPENDS_ON edges)
-        for ref in parsed["dbt_refs"]:
-            edges.append({
-                "source": ref,
-                "target": model_name,
-                "type": "DEPENDS_ON",
-                "file": str(file_path),
-            })
+        # Extract CTEs from WITH clause
+        ctes = re.findall(r'WITH\s+(\w+)\s+AS', content, re.IGNORECASE)
         
-        # dbt sources -> this model (SOURCES edges)
-        for src in parsed["dbt_sources"]:
-            source_name = f"{src['schema']}.{src['table']}"
-            edges.append({
-                "source": source_name,
-                "target": model_name,
-                "type": "SOURCES",
-                "file": str(file_path),
-            })
+        all_tables = list(set(tables + joins))
+        all_deps = all_tables + dbt_refs + dbt_sources
         
-        return edges
+        return {
+            "file": str(sql_file),
+            "tables": all_tables,
+            "ctes": ctes,
+            "columns": [],
+            "dbt_refs": dbt_refs,
+            "dbt_sources": dbt_sources,
+            "dependencies": all_deps,
+            "parse_method": "regex-fallback"
+        }
+    
+    def _extract_dbt_refs(self, content: str) -> List[str]:
+        """Extract dbt ref() calls."""
+        import re
+        refs = re.findall(r'\{\{\s*ref\s*\(\s*[\'"]([^\'"]+)[\'"]\s*\)\s*\}\}', content)
+        # Convert to model IDs
+        return [f"models.{ref.replace('/', '.')}" for ref in refs]
+    
+    def _extract_dbt_sources(self, content: str) -> List[str]:
+        """Extract dbt source() calls."""
+        import re
+        sources = re.findall(r'\{\{\s*source\s*\(\s*[\'"]([^\'"]+)[\'"]\s*,\s*[\'"]([^\'"]+)[\'"]\s*\)\s*\}\}', content)
+        # Convert to source IDs
+        return [f"seeds.{s[0]}_{s[1]}" for s in sources]
+    
+    def _remove_dbt_macros(self, content: str) -> str:
+        """Remove dbt Jinja macros for clean SQL parsing."""
+        import re
+        # Remove ref() calls
+        clean = re.sub(r'\{\{\s*ref\s*\([^}]+\)\s*\}\}', 'SELECT 1', content)
+        # Remove source() calls
+        clean = re.sub(r'\{\{\s*source\s*\([^}]+\)\s*\}\}', 'SELECT 1', clean)
+        return clean
+    
+    def analyze_directory(self, repo_path: Path) -> List[Dict[str, Any]]:
+        """Analyze all SQL files in directory."""
+        results = []
+        
+        for sql_file in repo_path.rglob("*.sql"):
+            if "node_modules" not in str(sql_file) and ".git" not in str(sql_file):
+                result = self.extract_dependencies(sql_file)
+                results.append(result)
+        
+        return results

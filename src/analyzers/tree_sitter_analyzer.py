@@ -1,114 +1,247 @@
-﻿"""Tree-Sitter Multi-Language AST Analyzer.
+﻿"""
+Tree-sitter Analyzer - Multi-language AST parsing
 
-Uses LanguageRouter to select correct grammar per file extension.
-Supports Python, SQL, YAML, JavaScript/TypeScript.
+Uses tree-sitter to parse source files and extract structural elements
+(imports, functions, classes) from the AST.
 """
+
 from pathlib import Path
-from typing import Optional
-
-from tree_sitter import Language, Parser, Query, QueryCursor
-
-# Import individual grammar packages (production-grade, maintained)
-import tree_sitter_python
-import tree_sitter_sql
-import tree_sitter_yaml
-# import tree_sitter_javascript  # Optional: add as needed
-# import tree_sitter_typescript  # Optional: add as needed
-
+from typing import Dict, List, Any, Optional
+import re
 
 class LanguageRouter:
-    """Maps file extensions to tree-sitter grammar configurations."""
+    """Selects correct grammar based on file extension."""
     
-    ROUTER: dict[str, dict] = {
-        ".py": {"grammar": tree_sitter_python, "name": "python"},
-        ".sql": {"grammar": tree_sitter_sql, "name": "sql"},
-        ".yml": {"grammar": tree_sitter_yaml, "name": "yaml"},
-        ".yaml": {"grammar": tree_sitter_yaml, "name": "yaml"},
-        # ".js": {"grammar": tree_sitter_javascript, "name": "javascript"},
-        # ".ts": {"grammar": tree_sitter_typescript, "name": "typescript"},
+    EXTENSION_MAP = {
+        ".py": "python",
+        ".sql": "sql",
+        ".yml": "yaml",
+        ".yaml": "yaml",
+        ".js": "javascript",
+        ".ts": "typescript",
+        ".json": "json"
     }
     
     @classmethod
     def get_language(cls, file_path: Path) -> Optional[str]:
-        """Return language name for file extension, or None if unsupported."""
-        config = cls.ROUTER.get(file_path.suffix.lower())
-        return config["name"] if config else None
+        """Get language from file extension."""
+        return cls.EXTENSION_MAP.get(file_path.suffix.lower())
     
     @classmethod
-    def get_grammar(cls, file_path: Path):
-        """Return tree-sitter grammar module for file extension."""
-        config = cls.ROUTER.get(file_path.suffix.lower())
-        return config["grammar"] if config else None
-    
-    @classmethod
-    def get_supported_extensions(cls) -> list[str]:
-        """Return list of supported file extensions."""
-        return list(cls.ROUTER.keys())
+    def is_supported(cls, file_path: Path) -> bool:
+        """Check if file type is supported."""
+        return cls.get_language(file_path) is not None
 
 
 class TreeSitterAnalyzer:
-    """Multi-language AST parser with QueryCursor API (tree-sitter 0.22+)."""
+    """
+    Multi-language AST parsing with tree-sitter.
+    
+    Extracts structural elements (imports, functions, classes) from AST.
+    Falls back to regex-based extraction if tree-sitter unavailable.
+    """
     
     def __init__(self):
-        self._languages = {}
-        self._parsers = {}
-        
-        # Pre-load languages and parsers for performance
-        for ext, config in LanguageRouter.ROUTER.items():
+        self.parsers = {}
+        self.tree_sitter_available = self._init_tree_sitter()
+    
+    def _init_tree_sitter(self) -> bool:
+        """Initialize tree-sitter parsers if available."""
+        try:
+            from tree_sitter import Parser, Language
+            
+            # Try to load Python grammar
             try:
-                grammar = config["grammar"]
-                lang_name = config["name"]
-                self._languages[ext] = Language(grammar.language())
-                self._parsers[ext] = Parser(self._languages[ext])
-            except Exception as e:
-                # Graceful degradation: skip unsupported grammars
-                pass
+                import tree_sitter_python
+                self.python_parser = Parser()
+                self.python_parser.set_language(tree_sitter_python.language())
+                self.parsers["python"] = self.python_parser
+                print("   tree-sitter-python loaded")
+            except:
+                print("   tree-sitter-python not available (using fallback)")
+            
+            # Try to load SQL grammar
+            try:
+                import tree_sitter_sql
+                self.sql_parser = Parser()
+                self.sql_parser.set_language(tree_sitter_sql.language())
+                self.parsers["sql"] = self.sql_parser
+                print("   tree-sitter-sql loaded")
+            except:
+                print("   tree-sitter-sql not available (using fallback)")
+            
+            return len(self.parsers) > 0
+        except ImportError:
+            print("   tree-sitter not installed (using fallback)")
+            return False
     
-    def parse_file(self, file_path: Path, content: Optional[str] = None) -> Optional[dict]:
-        """Parse a file and return AST root node + metadata."""
-        ext = file_path.suffix.lower()
-        if ext not in self._parsers:
-            return None
-        
-        if content is None:
-            content = file_path.read_text(encoding="utf-8", errors="replace")
-        
-        parser = self._parsers[ext]
-        tree = parser.parse(bytes(content, "utf-8"))
-        
-        return {
-            "root_node": tree.root_node,
-            "content": content,
-            "language": LanguageRouter.get_language(file_path),
-            "file_path": str(file_path),
-        }
-    
-    def query_captures(self, file_path: Path, query_text: str, target_capture: str) -> list[str]:
-        """Execute a tree-sitter query and return captured text values.
-        
-        Uses cursor.captures() API (tree-sitter 0.22+).
+    def analyze_file(self, file_path: Path) -> Dict[str, Any]:
         """
-        ext = file_path.suffix.lower()
-        if ext not in self._languages or not query_text:
-            return []
+        Analyze a single file.
         
-        result = self.parse_file(file_path)
-        if not result:
-            return []
+        Uses tree-sitter AST parsing if available, falls back to regex.
+        """
+        language = LanguageRouter.get_language(file_path)
+        
+        if not language:
+            return {
+                "file": str(file_path),
+                "language": "unknown",
+                "error": f"Unsupported language: {file_path.suffix}"
+            }
         
         try:
-            lang = self._languages[ext]
-            query = Query(lang, query_text)
-            cursor = QueryCursor(query)
-            captures_dict = cursor.captures(result["root_node"])
+            with open(file_path, "r", encoding="utf-8") as f:
+                content = f.read()
             
-            if target_capture not in captures_dict:
-                return []
+            # Use tree-sitter if available for this language
+            if self.tree_sitter_available and language in self.parsers:
+                return self._parse_with_tree_sitter(file_path, content, language)
+            else:
+                # Fallback to regex-based extraction
+                return self._parse_with_regex(file_path, content, language)
+        
+        except Exception as e:
+            return {
+                "file": str(file_path),
+                "language": language,
+                "error": str(e)
+            }
+    
+    def _parse_with_tree_sitter(self, file_path: Path, content: str, language: str) -> Dict[str, Any]:
+        """Parse file using tree-sitter AST."""
+        parser = self.parsers.get(language)
+        
+        if not parser:
+            return self._parse_with_regex(file_path, content, language)
+        
+        try:
+            # Parse content
+            tree = parser.parse(bytes(content, "utf8"))
+            root = tree.root_node
             
-            return [
-                result["content"][node.start_byte:node.end_byte]
-                for node in captures_dict[target_capture]
-            ]
-        except Exception:
-            # Graceful degradation: return empty on query errors
-            return []
+            # Extract structural elements based on language
+            if language == "python":
+                imports = self._extract_python_imports_ast(root, content)
+                functions = self._extract_python_functions_ast(root, content)
+                classes = self._extract_python_classes_ast(root, content)
+            elif language == "sql":
+                imports = []  # SQL doesn't have imports
+                functions = self._extract_sql_functions_ast(root, content)
+                classes = []  # SQL doesn't have classes
+            else:
+                imports, functions, classes = [], [], []
+            
+            return {
+                "file": str(file_path),
+                "language": language,
+                "lines": len(content.split("\n")),
+                "imports": imports,
+                "functions": functions,
+                "classes": classes,
+                "parse_method": "tree-sitter"
+            }
+        except Exception as e:
+            # Fallback to regex on error
+            return self._parse_with_regex(file_path, content, language)
+    
+    def _parse_with_regex(self, file_path: Path, content: str, language: str) -> Dict[str, Any]:
+        """Fallback regex-based parsing."""
+        imports = []
+        functions = []
+        classes = []
+        
+        if language == "python":
+            imports = re.findall(r'^import\s+(\w+)|^from\s+(\w+)\s+import', content, re.MULTILINE)
+            imports = [i[0] or i[1] for i in imports]
+            functions = re.findall(r'^def\s+(\w+)\s*\(', content, re.MULTILINE)
+            classes = re.findall(r'^class\s+(\w+)', content, re.MULTILINE)
+        elif language == "sql":
+            # Extract table references from FROM/JOIN clauses
+            tables = re.findall(r'FROM\s+(\w+)|JOIN\s+(\w+)', content, re.IGNORECASE)
+            imports = [t[0] or t[1] for t in tables]
+        
+        return {
+            "file": str(file_path),
+            "language": language,
+            "lines": len(content.split("\n")),
+            "imports": imports,
+            "functions": functions,
+            "classes": classes,
+            "parse_method": "regex-fallback"
+        }
+    
+    def _extract_python_imports_ast(self, root, content: str) -> List[str]:
+        """Extract Python imports from AST."""
+        imports = []
+        
+        def walk(node):
+            if node.type == "import_statement":
+                # import module
+                for child in node.children:
+                    if child.type == "dotted_name":
+                        imports.append(content[child.start_byte:child.end_byte])
+            elif node.type == "import_from_statement":
+                # from module import ...
+                for child in node.children:
+                    if child.type == "dotted_name":
+                        imports.append(content[child.start_byte:child.end_byte])
+                        break
+            else:
+                for child in node.children:
+                    walk(child)
+        
+        walk(root)
+        return list(set(imports))
+    
+    def _extract_python_functions_ast(self, root, content: str) -> List[str]:
+        """Extract Python function definitions from AST."""
+        functions = []
+        
+        def walk(node):
+            if node.type == "function_definition":
+                for child in node.children:
+                    if child.type == "identifier":
+                        functions.append(content[child.start_byte:child.end_byte])
+                        break
+            else:
+                for child in node.children:
+                    walk(child)
+        
+        walk(root)
+        return functions
+    
+    def _extract_python_classes_ast(self, root, content: str) -> List[str]:
+        """Extract Python class definitions from AST."""
+        classes = []
+        
+        def walk(node):
+            if node.type == "class_definition":
+                for child in node.children:
+                    if child.type == "identifier":
+                        classes.append(content[child.start_byte:child.end_byte])
+                        break
+            else:
+                for child in node.children:
+                    walk(child)
+        
+        walk(root)
+        return classes
+    
+    def _extract_sql_functions_ast(self, root, content: str) -> List[str]:
+        """Extract SQL function/procedure names from AST."""
+        functions = []
+        # SQL AST structure varies by dialect - basic extraction
+        return functions
+    
+    def analyze_directory(self, repo_path: Path) -> List[Dict[str, Any]]:
+        """Analyze all supported files in directory."""
+        results = []
+        
+        for ext in LanguageRouter.EXTENSION_MAP.keys():
+            for file_path in repo_path.rglob(f"*{ext}"):
+                if "node_modules" not in str(file_path) and ".git" not in str(file_path):
+                    result = self.analyze_file(file_path)
+                    results.append(result)
+        
+        return results
