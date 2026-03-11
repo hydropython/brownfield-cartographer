@@ -1,106 +1,162 @@
-"""DAG Config Parser  dbt YAML config parsing for pipeline topology.
+"""DAG Config Parser  Extract dbt YAML configurations as graph edges.
 
-Extracts:
-- Model definitions from schema.yml
-- Source definitions from sources.yml
-- Test configurations
-- Column-level lineage
+Confidence Scoring:
+- 1.0: Explicit YAML relationships (schema.yml foreign keys)
+- 1.0: Source definitions (schema.yml sources)
+- 1.0: Test definitions (schema.yml tests)
 """
 from pathlib import Path
-from typing import Optional
-import yaml
+from typing import Optional, List, Dict
+
+try:
+    import yaml
+except ImportError:
+    yaml = None
 
 
 class DagConfigParser:
-    """Parse dbt/Airflow YAML configs for pipeline topology."""
+    """Extract pipeline topology from dbt YAML config files."""
     
     def __init__(self):
-        pass
+        self.parse_warnings = []
     
-    def parse_dbt_schema(self, file_path: Path) -> dict:
-        """Parse a dbt schema.yml file."""
+    def parse_yaml_file(self, file_path: Path) -> dict:
+        """Parse a dbt YAML config file."""
         result = {
             "models": [],
             "sources": [],
             "tests": [],
+            "relationships": [],
             "file_path": str(file_path),
         }
         
         if not file_path.exists():
             return result
         
+        if yaml is None:
+            self.parse_warnings.append(f"PyYAML not installed, skipping {file_path}")
+            return result
+        
         try:
             content = file_path.read_text(encoding="utf-8")
             data = yaml.safe_load(content)
-        except Exception:
+        except Exception as e:
+            self.parse_warnings.append(f"YAML parse error {file_path}: {e}")
             return result
         
         if not data:
             return result
         
-        # Extract models
-        for model in data.get("models", []):
-            if isinstance(model, dict):
-                model_info = {
-                    "name": model.get("name", ""),
-                    "description": model.get("description", ""),
-                    "columns": [col.get("name") for col in model.get("columns", []) if isinstance(col, dict)],
-                    "tests": [],
-                }
-                
-                # Extract tests from columns
-                for col in model.get("columns", []):
-                    if isinstance(col, dict):
-                        tests = col.get("tests", [])
-                        if tests:
-                            model_info["tests"].extend(tests)
-                
-                result["models"].append(model_info)
-        
-        # Extract sources
-        for source in data.get("sources", []):
-            if isinstance(source, dict):
-                source_info = {
-                    "name": source.get("name", ""),
-                    "schema": source.get("schema", ""),
-                    "tables": [tbl.get("name") for tbl in source.get("tables", []) if isinstance(tbl, dict)],
-                }
-                result["sources"].append(source_info)
+        # schema.yml has: models as LIST of dicts with 'name' key
+        models = data.get("models", [])
+        if isinstance(models, list) and len(models) > 0:
+            if isinstance(models[0], dict) and "name" in models[0]:
+                self._parse_schema_yml(data, result, file_path)
         
         return result
     
-    def get_config_edges(self, file_path: Path) -> list[dict]:
-        """Convert parsed config to edge format for graph."""
-        edges = []
-        parsed = self.parse_dbt_schema(file_path)
-        
-        # Model -> columns (HAS_COLUMN edges)
-        for model in parsed["models"]:
-            for col in model["columns"]:
-                edges.append({
-                    "source": model["name"],
-                    "target": f"{model['name']}.{col}",
-                    "type": "HAS_COLUMN",
-                    "file": str(file_path),
-                })
+    def _parse_schema_yml(self, data: dict, result: dict, file_path: Path) -> None:
+        """Parse schema.yml file (model definitions with columns/tests)."""
+        # Extract models
+        for model in data.get("models", []):
+            if not isinstance(model, dict):
+                continue
+            model_name = model.get("name", "")
+            if not model_name:
+                continue
             
-            # Model -> tests (HAS_TEST edges)
-            for test in model["tests"]:
+            result["models"].append({
+                "name": model_name,
+                "file": str(file_path),
+                "columns": [],
+                "tests": [],
+            })
+            
+            for col in model.get("columns", []):
+                if not isinstance(col, dict):
+                    continue
+                col_name = col.get("name", "")
+                if col_name:
+                    result["models"][-1]["columns"].append(col_name)
+                
+                for test in col.get("tests", []):
+                    if isinstance(test, str):
+                        result["models"][-1]["tests"].append({"type": test, "column": col_name})
+                    elif isinstance(test, dict):
+                        test_name = list(test.keys())[0]
+                        result["models"][-1]["tests"].append({
+                            "type": test_name,
+                            "column": col_name,
+                            "config": test[test_name]
+                        })
+                        
+                        if test_name == "relationships":
+                            rel_config = test["relationships"]
+                            to_ref = str(rel_config.get("to", ""))
+                            to_model = to_ref.replace("ref('", "").replace('ref("', "").replace("')", "").replace('")', "")
+                            result["relationships"].append({
+                                "from_model": model_name,
+                                "from_column": col_name,
+                                "to_model": to_model,
+                                "to_column": str(rel_config.get("field", "")),
+                                "file": str(file_path),
+                            })
+        
+        # Extract sources
+        for source in data.get("sources", []):
+            if not isinstance(source, dict):
+                continue
+            source_name = source.get("name", "")
+            for table in source.get("tables", []):
+                if isinstance(table, dict):
+                    table_name = table.get("name", "")
+                    if table_name:
+                        result["sources"].append({
+                            "source_name": source_name,
+                            "table_name": table_name,
+                            "file": str(file_path),
+                            "columns": [c.get("name") for c in table.get("columns", []) if isinstance(c, dict)],
+                        })
+    
+    def get_config_edges(self, file_path: Path) -> list[dict]:
+        """Convert parsed YAML config to edge format."""
+        edges = []
+        result = self.parse_yaml_file(file_path)
+        
+        # Relationship edges (foreign keys) - HIGH CONFIDENCE (1.0)
+        for rel in result["relationships"]:
+            edges.append({
+                "source": rel["to_model"],
+                "target": rel["from_model"],
+                "type": "RELATIONSHIP",
+                "subtype": "foreign_key",
+                "from_column": rel["from_column"],
+                "to_column": rel["to_column"],
+                "file": rel["file"],
+                "confidence": 1.0,
+            })
+        
+        # Source edges - HIGH CONFIDENCE (1.0)
+        for src in result["sources"]:
+            edges.append({
+                "source": f"{src['source_name']}.{src['table_name']}",
+                "target": src["table_name"],
+                "type": "SOURCES",
+                "file": src["file"],
+                "confidence": 1.0,
+            })
+        
+        # Test edges - HIGH CONFIDENCE (1.0)
+        for model in result["models"]:
+            for test in model.get("tests", []):
                 edges.append({
                     "source": model["name"],
-                    "target": f"{model['name']}_test_{test}",
-                    "type": "HAS_TEST",
-                    "file": str(file_path),
-                })
-        
-        # Source -> tables (CONTAINS edges)
-        for source in parsed["sources"]:
-            for table in source["tables"]:
-                edges.append({
-                    "source": source["name"],
-                    "target": f"{source['name']}.{table}",
-                    "type": "CONTAINS",
-                    "file": str(file_path),
+                    "target": f"{model['name']}_test_{test['type']}_{test['column']}",
+                    "type": "TESTS",
+                    "subtype": test["type"],
+                    "column": test["column"],
+                    "file": model["file"],
+                    "confidence": 1.0,
                 })
         
         return edges

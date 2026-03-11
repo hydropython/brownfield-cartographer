@@ -1,9 +1,6 @@
-"""Surveyor Agent  Phase 1: Deterministic Structural Extraction.
-
-Uses INDIVIDUAL grammar packages (tree-sitter-python, tree-sitter-sql, etc.)
-for production-grade stability with tree-sitter >= 0.22.
-"""
+"""Surveyor Agent  Phase 1: Deterministic Structural Extraction."""
 import json
+import re
 from pathlib import Path
 from typing import Optional, Literal
 from datetime import datetime
@@ -89,19 +86,18 @@ class SurveyorAgent:
         return import_path if import_path else None
     
     def _extract_captures(self, query_text: str, lang, root_node, content: str, target_capture: str) -> list:
-        """Extract captures using cursor.captures() - returns dict {name: [nodes]}."""
         results = []
         if not query_text or root_node.child_count == 0:
             return results
         try:
             query = Query(lang, query_text)
             cursor = QueryCursor(query)
-            captures_dict = cursor.captures(root_node)  # Returns dict: {capture_name: [Node, ...]}
+            captures_dict = cursor.captures(root_node)
             if target_capture in captures_dict:
                 for node in captures_dict[target_capture]:
                     results.append(content[node.start_byte:node.end_byte])
         except Exception:
-            pass  # Graceful degradation
+            pass
         return results
     
     def analyze_module(self, file_path: Path) -> Optional[ModuleNode]:
@@ -117,16 +113,28 @@ class SurveyorAgent:
             root_node = tree.root_node
             lang = self._languages[file_path.suffix.lower()]
             
-            # === Extract imports ===
+            # Extract imports via tree-sitter query
             import_query_text = self._load_query(language_name, "imports")
             imports = self._extract_captures(import_query_text, lang, root_node, content, "import_path")
+            
+            # Regex fallback for SQL files with dbt Jinja
+            if language_name == "sql":
+                for match in re.finditer(r'\{\{\s*ref\s*\(\s*[\'"]([^\'"]+)[\'"]\s*\)\s*\}\}', content):
+                    ref_name = match.group(1)
+                    if ref_name not in imports:
+                        imports.append(ref_name)
+                for match in re.finditer(r'\{\{\s*source\s*\(\s*[\'"]([^\'"]+)[\'"]\s*,\s*[\'"]([^\'"]+)[\'"]\s*\)\s*\}\}', content):
+                    source_name = match.group(1) + "." + match.group(2)
+                    if source_name not in imports:
+                        imports.append(source_name)
+            
             imports = [self._resolve_import_path(imp, file_path, self.repo_path) for imp in imports if self._resolve_import_path(imp, file_path, self.repo_path)]
             
-            # === Extract public API ===
+            # Extract public API
             api_query_text = self._load_query(language_name, "public_api")
             exports = self._extract_captures(api_query_text, lang, root_node, content, "name")
             
-            # === Extract class inheritance ===
+            # Extract class inheritance
             class_query_text = self._load_query(language_name, "classes")
             class_captures = self._extract_captures(class_query_text, lang, root_node, content, "class_name")
             exports.extend([c for c in class_captures if c not in exports])
@@ -181,14 +189,12 @@ class SurveyorAgent:
                 edge = Edge(source=module.id, target=target_id, edge_type="IMPORTS", confidence_score=1.0, evidence_type="static")
                 self.graph.add_edge(edge)
             self._add_ghost_nodes(module.imports, module.id)
-        # === Hub Detection: PageRank (per spec) ===
         if nx_graph.number_of_nodes() > 0:
             try:
                 pagerank = nx.pagerank(nx_graph, alpha=0.85, max_iter=100)
                 hubs = sorted(pagerank.items(), key=lambda x: x[1], reverse=True)[:5]
                 self.graph.architectural_hubs = [hub_id for hub_id, score in hubs if score > 0.001]
             except Exception as e:
-                # Fallback to in-degree if PageRank fails
                 self.graph.parse_warnings.append(f"PageRank failed, using in-degree: {e}")
                 in_degrees = {node: nx_graph.in_degree(node) for node in nx_graph.nodes()}
                 hubs = sorted(in_degrees.items(), key=lambda x: x[1], reverse=True)[:5]

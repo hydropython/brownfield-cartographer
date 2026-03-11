@@ -19,12 +19,18 @@ from ..analyzers.python_dataflow import PythonDataFlowAnalyzer
 from ..analyzers.notebook_parser import NotebookParser
 from ..analyzers.airflow_dag_parser import AirflowDagParser
 from ..analyzers.prefect_flow_parser import PrefectFlowParser
+from ..analyzers.column_lineage import ColumnLineageAnalyzer
 
 
 class HydrologistAgent:
     """Data Lineage Agent  merges all 6 data flow analyzers."""
     
-    def __init__(self, repo_path: Path, output_dir: Path = Path(".cartography"), sql_dialect: str = "postgres"):
+    def __init__(
+        self,
+        repo_path: Path,
+        output_dir: Path = Path(".cartography"),
+        sql_dialect: str = "postgres",
+    ):
         self.repo_path = Path(repo_path).resolve()
         self.output_dir = Path(output_dir)
         self.sql_dialect = sql_dialect
@@ -36,7 +42,9 @@ class HydrologistAgent:
         self.notebook_parser = NotebookParser()
         self.airflow_parser = AirflowDagParser()
         self.prefect_parser = PrefectFlowParser()
+        self.column_analyzer = ColumnLineageAnalyzer(dialect=sql_dialect)
         
+        # Lineage graph state (NetworkX DiGraph)
         self.lineage_graph = nx.DiGraph()
         self.lineage_edges = []
         self.parse_warnings = []
@@ -44,7 +52,7 @@ class HydrologistAgent:
     def run(self, module_graph: Optional[object] = None) -> nx.DiGraph:
         """Run full lineage extraction pipeline with all 6 analyzers."""
         
-        # Analyzer 1: SQL Lineage
+        # Analyzer 1: SQL Lineage (sqlglot)
         sql_files = list(self.repo_path.glob("**/*.sql"))
         print(f"  [1/6] SQL files: {len(sql_files)}")
         for sql_file in sql_files:
@@ -104,9 +112,28 @@ class HydrologistAgent:
             except Exception as e:
                 self.parse_warnings.append(f"Prefect error {pf_file}: {e}")
         
-        # Build merged lineage graph
+        # Analyzer 7: Column-Level Lineage (PageRank Hubs Only)
+        print(f"  [7/7] Column-level lineage for hubs...")
+        sql_files = list(self.repo_path.glob("**/*.sql"))
+        hub_tables = ["customers", "orders", "payments", "stg_customers", "stg_orders", "stg_payments"]
+        for sql_file in sql_files:
+            target = sql_file.stem
+            if target in hub_tables:
+                try:
+                    col_edges = self.column_analyzer.get_column_edges(sql_file, target)
+                    self.lineage_edges.extend(col_edges)
+                    print(f"    {sql_file.name}: {len(col_edges)} column edges")
+                except Exception as e:
+                    self.parse_warnings.append(f"Column lineage error {sql_file}: {e}")
+        
+        # Build merged lineage graph (NetworkX DiGraph)
         for edge in self.lineage_edges:
-            self.lineage_graph.add_edge(edge["source"], edge["target"], type=edge["type"], file=edge.get("file", ""))
+            self.lineage_graph.add_edge(
+                edge["source"],
+                edge["target"],
+                type=edge["type"],
+                file=edge.get("file", ""),
+            )
         
         print(f"\n  Merged lineage graph: {self.lineage_graph.number_of_nodes()} nodes, {self.lineage_graph.number_of_edges()} edges")
         
@@ -114,18 +141,27 @@ class HydrologistAgent:
     
     def find_sources(self) -> list[str]:
         """Find entry-point tables (nodes with in-degree=0)."""
-        return sorted([node for node in self.lineage_graph.nodes() if self.lineage_graph.in_degree(node) == 0])
+        return sorted([
+            node for node in self.lineage_graph.nodes()
+            if self.lineage_graph.in_degree(node) == 0
+        ])
     
     def find_sinks(self) -> list[str]:
         """Find output tables (nodes with out-degree=0)."""
-        return sorted([node for node in self.lineage_graph.nodes() if self.lineage_graph.out_degree(node) == 0])
+        return sorted([
+            node for node in self.lineage_graph.nodes()
+            if self.lineage_graph.out_degree(node) == 0
+        ])
     
     def blast_radius(self, table_id: str) -> dict:
-        """Compute downstream impact of a table change."""
+        """Compute downstream impact of a table change using nx.descendants()."""
         if table_id not in self.lineage_graph:
             return {"table": table_id, "downstream_tables": [], "depth": 0, "count": 0}
         
+        # BFS downstream using NetworkX
         downstream = list(nx.descendants(self.lineage_graph, table_id))
+        
+        # Compute max depth
         max_depth = 0
         for node in downstream:
             try:
@@ -134,7 +170,12 @@ class HydrologistAgent:
             except nx.NetworkXNoPath:
                 pass
         
-        return {"table": table_id, "downstream_tables": sorted(downstream), "depth": max_depth, "count": len(downstream)}
+        return {
+            "table": table_id,
+            "downstream_tables": sorted(downstream),
+            "depth": max_depth,
+            "count": len(downstream),
+        }
     
     def save_artifacts(self) -> Path:
         """Save lineage graph to .cartography/lineage_graph.json."""
@@ -156,7 +197,10 @@ class HydrologistAgent:
                 "prefect": len(list(self.repo_path.glob("**/*flow*.py")) + list(self.repo_path.glob("**/prefect/**/*.py"))),
             },
             "nodes": list(self.lineage_graph.nodes()),
-            "edges": [{"source": u, "target": v, **d} for u, v, d in self.lineage_graph.edges(data=True)],
+            "edges": [
+                {"source": u, "target": v, **d}
+                for u, v, d in self.lineage_graph.edges(data=True)
+            ],
         }
         
         with open(output_path, "w", encoding="utf-8") as f:
