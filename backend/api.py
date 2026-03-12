@@ -1,21 +1,21 @@
-﻿from pathlib import Path
-from fastapi import FastAPI, HTTPException
+from pathlib import Path
+from fastapi import FastAPI, Query, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse, HTMLResponse
 from src.agents.surveyor import SurveyorAgent
 from src.agents.hydrologist import HydrologistAgent
 import traceback
-
+from src.orchestrator import run_analysis
 app = FastAPI(title="Brownfield Cartographer API", version="0.1.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 _cache = {}
 
-def _load_surveyor():
+def _load_surveyor(repo_path: str = "targets/jaffle_shop"):
     if "surveyor" not in _cache:
         try:
             print("\n=== LOADING SURVEYOR AGENT ===")
-            agent = SurveyorAgent(repo_path=Path("targets/jaffle_shop"))
+            agent = SurveyorAgent(repo_path=Path(repo_path))
             graph = agent.run()
             
             elements = []
@@ -32,12 +32,12 @@ def _load_surveyor():
                 print(f"  Node: {mid}")
             
             # Step 2: Add seed nodes from seeds/ directory
-            seeds_dir = Path("targets/jaffle_shop/seeds")
+            seeds_dir = Path(repo_path) / "seeds"
             if seeds_dir.exists():
                 for seed_file in seeds_dir.glob("*.csv"):
                     seed_name = seed_file.stem  # e.g., "raw_customers"
                     seed_id = f"seeds.{seed_name}"
-                    elements.append({"data": {"id": seed_id, "label": seed_name, "type": "seed", "file": str(seed_file.relative_to(Path("targets/jaffle_shop")))}})
+                    elements.append({"data": {"id": seed_id, "label": seed_name, "type": "seed", "file": str(seed_file.relative_to(Path(repo_path)))}})
                     node_ids.add(seed_id)
                     print(f"  + Seed: {seed_id}")
             
@@ -77,11 +77,11 @@ def _load_surveyor():
     
     return _cache["surveyor"]
 
-def _load_hydrologist():
+def _load_hydrologist(repo_path: str = "targets/jaffle_shop"):
     if "hydrologist" not in _cache:
         try:
             print("\n=== LOADING HYDROLOGIST AGENT ===")
-            agent = HydrologistAgent(repo_path=Path("targets/jaffle_shop"))
+            agent = HydrologistAgent(repo_path=Path(repo_path))
             graph = agent.run()
             
             edges = getattr(agent, "lineage_edges", [])
@@ -134,28 +134,28 @@ async def js(path: str):
     return FileResponse(f"frontend/js/{path}", media_type="application/javascript")
 
 @app.get("/api/agents")
-async def agents():
-    s, h = _load_surveyor(), _load_hydrologist()
+async def get_agents(repo_path: str = Query(default="targets/jaffle_shop")):
+    s, h = _load_surveyor(repo_path), _load_hydrologist(repo_path)
     return [
         {"name":"Surveyor","nodes":s["nodes"],"edges":s["edges"],"confidence_high":s["edges"]},
         {"name":"Hydrologist","nodes":h["nodes"],"edges":h["edges"],"confidence_high":h["conf_high"],"confidence_medium":h["conf_med"]}
     ]
 
 @app.get("/api/agent/surveyor/graph")
-async def surveyor_graph():
-    return {"elements": _load_surveyor()["elements"]}
+async def get_surveyor_graph(repo_path: str = Query(default="targets/jaffle_shop")):
+    return {"elements": _load_surveyor(repo_path)["elements"]}
 
 @app.get("/api/agent/hydrologist/graph")
-async def hydrologist_graph():
-    return {"elements": _load_hydrologist()["elements"]}
+async def get_hydrologist_graph(repo_path: str = Query(default="targets/jaffle_shop")):
+    return {"elements": _load_hydrologist(repo_path)["elements"]}
 
 @app.get("/api/agent/hydrologist/edge-breakdown")
 async def edge_breakdown():
-    return _load_hydrologist()["edge_breakdown"]
+    return _load_hydrologist(repo_path)["edge_breakdown"]
 
 @app.get("/api/agent/hydrologist/blast-radius")
 async def blast_radius(target: str = "raw_customers"):
-    h = _load_hydrologist()
+    h = _load_hydrologist(repo_path)
     agent = h.get("agent")
     result = agent.blast_radius(target) if agent and hasattr(agent,"blast_radius") else {"count":0}
     tests = len([e for e in getattr(agent,"lineage_edges",[]) if e.get("type")=="TESTS"]) if agent else 0
@@ -166,8 +166,101 @@ async def blast_radius(target: str = "raw_customers"):
 async def hubs(top_n: int = 5):
     return [{"id":"models.customers","centrality":1.0,"in_degree":3,"out_degree":0}]
 
-@app.get("/api/export/graph/{agent}/json")
+
+@app.get("/api/repository/analyze")
+async def analyze_repository(repo_path: str):
+    '''Run analysis via orchestrator with progress logging'''
+    from pathlib import Path
+    from src.orchestrator import run_analysis
+    
+    try:
+        path = Path(repo_path)
+        output_dir = path / ".cartography"
+        
+        # Run analysis via orchestrator (includes progress tracking)
+        results = run_analysis(repo_path=path, output_dir=output_dir, verbose=True)
+        
+        # Extract results for frontend
+        surveyor = results.get("surveyor", {})
+        hydrologist = results.get("hydrologist", {})
+        
+        return {
+            "success": len(results.get("errors", [])) == 0,
+            "repo_path": str(repo_path),
+            "progress_log": results.get("progress_log", []),  # For frontend progress display
+            "results": {
+                "surveyor": {
+                    "nodes": surveyor.get("nodes", 0),
+                    "edges": surveyor.get("edges", 0)
+                },
+                "hydrologist": {
+                    "nodes": hydrologist.get("nodes", 0),
+                    "edges": hydrologist.get("edges", 0)
+                }
+            },
+            "errors": results.get("errors", [])
+        }
+        
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "progress_log": [],
+            "results": {}
+        }
+
+
+
 async def export(agent: str):
-    if agent == "surveyor": return JSONResponse(content={"elements": _load_surveyor()["elements"]})
-    if agent == "hydrologist": return JSONResponse(content={"elements": _load_hydrologist()["elements"]})
+    if agent == "surveyor": return JSONResponse(content={"elements": _load_surveyor(repo_path)["elements"]})
+    if agent == "hydrologist": return JSONResponse(content={"elements": _load_hydrologist(repo_path)["elements"]})
     raise HTTPException(404)
+
+
+# ============================================
+# SIMPLE ANALYSIS API - Minimal & Working
+# ============================================
+
+@app.get("/api/analyze")
+async def simple_analyze(repo_path: str = "targets/jaffle_shop"):
+    """
+    Simple endpoint: takes repo_path, runs orchestrator, returns results.
+    Test with: Invoke-RestMethod "http://127.0.0.1:8002/api/analyze"
+    """
+    from pathlib import Path
+    from src.orchestrator import run_analysis
+    
+    try:
+        path = Path(repo_path)
+        output_dir = path / ".cartography"
+        
+        # Run the orchestrator
+        result = run_analysis(repo_path=path, output_dir=output_dir, verbose=False)
+        
+        # Extract simple metrics
+        s = result.get("surveyor", {})
+        h = result.get("hydrologist", {})
+        
+        return {
+            "ok": True,
+            "repo": repo_path,
+            "surveyor": {"nodes": s.get("nodes", 0), "edges": s.get("edges", 0)},
+            "hydrologist": {"nodes": h.get("nodes", 0), "edges": h.get("edges", 0)},
+            "total_nodes": s.get("nodes", 0) + h.get("nodes", 0),
+            "total_edges": s.get("edges", 0) + h.get("edges", 0),
+            "artifacts": result.get("artifacts", []),
+            "errors": result.get("errors", [])
+        }
+        
+    except Exception as e:
+        return {"ok": False, "error": str(e), "repo": repo_path}
+
+
+
+
+
+
+
+
+
+

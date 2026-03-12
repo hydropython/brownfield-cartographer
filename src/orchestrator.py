@@ -1,13 +1,14 @@
-﻿"""
+"""
 Orchestrator - Wires Surveyor + Hydrologist in sequence
 
 Serializes outputs to .cartography/ directory.
-Includes robust error handling and logging.
+Includes robust error handling and logging with progress tracking.
 """
 
 from pathlib import Path
 from typing import List, Dict, Any
 import logging
+from datetime import datetime
 from tqdm import tqdm
 
 # Configure logging
@@ -19,6 +20,36 @@ logger = logging.getLogger(__name__)
 
 from .agents.surveyor import SurveyorAgent
 from .agents.hydrologist import HydrologistAgent
+# SemanticistAgent import made optional to avoid breaking when llm module missing
+try:
+    HAS_SEMANTICIST = True
+except ImportError:
+    SemanticistAgent = None
+    HAS_SEMANTICIST = False
+
+
+def _log_progress(results: dict, message: str, level: str = "info"):
+    """Add progress entry to results for frontend display"""
+    entry = {
+        "timestamp": datetime.now().strftime("%H:%M:%S"),
+        "message": message,
+        "level": level
+    }
+    results["progress_log"].append(entry)
+    if level == "error":
+        logger.error(message)
+    else:
+        logger.info(message)
+
+
+def _get_graph_metrics(graph):
+    """
+    Safely extract node/edge counts from any graph type.
+    Handles both raw NetworkX DiGraph and CartographyGraph wrapper.
+    """
+    nodes = graph.number_of_nodes() if hasattr(graph, "number_of_nodes") else getattr(graph, "total_nodes", 0)
+    edges = graph.number_of_edges() if hasattr(graph, "number_of_edges") else getattr(graph, "total_edges", 0)
+    return nodes, edges
 
 
 def run_analysis(
@@ -37,7 +68,7 @@ def run_analysis(
         verbose: Enable verbose output
     
     Returns:
-        Dictionary with analysis results
+        Dictionary with analysis results and progress log
     """
     if verbose:
         logging.getLogger().setLevel(logging.DEBUG)
@@ -53,13 +84,17 @@ def run_analysis(
         "agents_run": agents,
         "artifacts": [],
         "errors": [],
-        "warnings": []
+        "warnings": [],
+        "progress_log": []
     }
     
-    # Run Surveyor Agent with error isolation
+    # ========================
+    # Run Surveyor Agent
+    # ========================
     if "surveyor" in agents:
         try:
             logger.info("[1/2] Running Surveyor Agent...")
+            _log_progress(results, "Agent 1 (Surveyor): Starting module analysis", "info")
             logger.info(f"  Repository: {repo_path}")
             
             surveyor = SurveyorAgent(repo_path=repo_path)
@@ -69,28 +104,41 @@ def run_analysis(
             output_path = output_dir / "module_graph.json"
             graph.to_file(output_path)
             results["artifacts"].append(str(output_path))
+            
+            # Extract metrics safely
+            s_nodes, s_edges = _get_graph_metrics(graph)
+            
             results["surveyor"] = {
-                "nodes": graph.total_nodes,
-                "edges": graph.total_edges,
-                "hubs": graph.architectural_hubs,
+                "nodes": s_nodes,
+                "edges": s_edges,
+                "hubs": getattr(graph, "architectural_hubs", []),
                 "warnings": getattr(graph, "parse_warnings", [])
             }
             
-            logger.info(f"   Module Graph: {graph.total_nodes} nodes, {graph.total_edges} edges")
+            logger.info(f"   Module Graph: {s_nodes} nodes, {s_edges} edges")
+            _log_progress(results, f"✓ Surveyor: {s_nodes} nodes, {s_edges} edges", "success")
             logger.info(f"   Saved to: {output_path}")
             
         except Exception as e:
             logger.error(f"Surveyor Agent failed: {e}")
+            _log_progress(results, f"✗ Surveyor failed: {e}", "error")
             results["errors"].append({"agent": "surveyor", "error": str(e)})
             results["warnings"].append(f"Surveyor analysis incomplete: {e}")
     
-    # Run Hydrologist Agent with error isolation
+    # ========================
+    # Run Hydrologist Agent
+    # ========================
     if "hydrologist" in agents:
         try:
             logger.info("[2/2] Running Hydrologist Agent...")
+            _log_progress(results, "Agent 2 (Hydrologist): Starting lineage extraction", "info")
             
             hydrologist = HydrologistAgent(repo_path=repo_path)
             graph = hydrologist.run()
+            
+            # Extract metrics safely (Hydrologist returns raw DiGraph)
+            h_nodes, h_edges = _get_graph_metrics(graph)
+            lineage_edges = getattr(hydrologist, "lineage_edges", [])
             
             # Save lineage graph
             output_path = output_dir / "lineage_graph.json"
@@ -98,28 +146,47 @@ def run_analysis(
             import json
             with open(output_path, "w") as f:
                 json.dump({
-                    "nodes": graph.total_nodes,
-                    "edges": len(getattr(hydrologist, "lineage_edges", [])),
-                    "edges_detail": getattr(hydrologist, "lineage_edges", [])
+                    "nodes": h_nodes,
+                    "edges": len(lineage_edges),
+                    "edges_detail": lineage_edges
                 }, f, indent=2)
             
             results["artifacts"].append(str(output_path))
             results["hydrologist"] = {
-                "nodes": graph.total_nodes,
-                "edges": len(getattr(hydrologist, "lineage_edges", [])),
+                "nodes": h_nodes,
+                "edges": len(lineage_edges),
                 "warnings": []
             }
             
-            logger.info(f"   Lineage Graph: {graph.total_nodes} nodes, {len(getattr(hydrologist, 'lineage_edges', []))} edges")
+            logger.info(f"   Lineage Graph: {h_nodes} nodes, {len(lineage_edges)} edges")
+            _log_progress(results, f"✓ Hydrologist: {h_nodes} nodes, {len(lineage_edges)} edges", "success")
             logger.info(f"   Saved to: {output_path}")
             
         except Exception as e:
             logger.error(f"Hydrologist Agent failed: {e}")
+            _log_progress(results, f"✗ Hydrologist failed: {e}", "error")
             results["errors"].append({"agent": "hydrologist", "error": str(e)})
             results["warnings"].append(f"Hydrologist analysis incomplete: {e}")
     
-    # Log summary
-    logger.info()
+    # ========================
+
+    # Run Semanticist Agent
+    if "semanticist" in agents:
+        try:
+            logger.info("[3/3] Running Semanticist Agent...")
+            _log_progress(results, "Agent 3 (Semanticist): Starting LLM analysis", "info")
+            semanticist = SemanticistAgent(repo_path=repo_path, budget_limit=2.00)
+            sem_results = semanticist.run(results.get("surveyor", {}), results.get("hydrologist", {}))
+            results["semanticist"] = {"modules_analyzed": len(sem_results.get("purpose_statements", {})), "domains": len(sem_results.get("domain_clusters", {})), "budget": sem_results.get("budget", {})}
+            _log_progress(results, f" Semanticist: {results['semanticist']['modules_analyzed']} modules, {results['semanticist']['domains']} domains", "success")
+        except Exception as e:
+            logger.error(f"Semanticist failed: {e}")
+            _log_progress(results, f" Semanticist failed: {e}", "error")
+            results["errors"].append({"agent": "semanticist", "error": str(e)})
+
+        # Log Summary
+    # ========================
+    logger.info("")
     logger.info("=" * 60)
     logger.info("PIPELINE SUMMARY")
     logger.info("=" * 60)
@@ -128,4 +195,7 @@ def run_analysis(
     logger.info(f"Errors: {len(results['errors'])}")
     logger.info(f"Warnings: {len(results['warnings'])}")
     
+    _log_progress(results, "✓ Analysis pipeline complete", "success")
+    
     return results
+

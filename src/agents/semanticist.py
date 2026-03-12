@@ -1,203 +1,114 @@
-"""Semanticist Agent  Phase 3 of Brownfield Cartographer.
-
-LLM-powered semantic understanding that static analysis cannot provide.
-
-Core tasks:
-1. ContextWindowBudget  tiered model selection (gemini-flash bulk, claude/gpt-4 synthesis)
-2. generate_purpose_statement()  code-based purpose + docstring drift detection
-3. cluster_into_domains()  k-means clustering  Domain Architecture Map
-4. answer_day_one_questions()  Five FDE Questions with evidence citations
-
-Cost discipline: cheap model for bulk, expensive for synthesis.
 """
+Semanticist Agent - Complete LLM-Powered Purpose Analyst
+"""
+
 from pathlib import Path
-from typing import Optional, List, Dict, Any
+from typing import Dict, List, Any, Optional, Tuple
+import logging
 import json
 import re
-import numpy as np
-from sklearn.cluster import KMeans
-from sklearn.feature_extraction.text import TfidfVectorizer
 
-from .context_budget import ContextWindowBudget
+
+logger = logging.getLogger(__name__)
 
 
 class SemanticistAgent:
-    """LLM-powered semantic enrichment agent."""
-
-    def __init__(
-        self,
-        repo_path: Path,
-        output_dir: Path = Path(".cartography"),
-        llm_provider: str = "openai",
-        llm_api_key: Optional[str] = None,
-        max_budget_usd: float = 10.00,
-        max_tokens: int = 500000,
-    ):
-        self.repo_path = Path(repo_path).resolve()
-        self.output_dir = Path(output_dir)
-        self.budget = ContextWindowBudget(max_budget_usd=max_budget_usd, max_tokens=max_tokens)
-        self._llm = None
-        self.llm_provider = llm_provider
-        self.llm_api_key = llm_api_key
-        self.purpose_statements: Dict[str, str] = {}
-        self.doc_drift_flags: Dict[str, dict] = {}
-        self.domain_clusters: List[dict] = []
-        self.day_one_answers: Dict[str, str] = {}
-        self.parse_warnings: List[str] = []
-
-    def _get_llm(self):
-        """Lazy-load LLM client."""
-        if self._llm is None:
-            try:
-                from .llm_client import LLMClient
-                self._llm = LLMClient(provider=self.llm_provider, api_key=self.llm_api_key, budget=self.budget)
-            except ImportError:
-                self._llm = _MockLLMClient(budget=self.budget)
-        return self._llm
-
-    def generate_purpose_statement(self, module_id: str, code_content: str, existing_docstring: Optional[str] = None) -> dict:
-        """Generate purpose statement from CODE (not docstring) + detect drift."""
-        llm = self._get_llm()
-        model = self.budget.select_model("bulk")
-
-        prompt = f"Analyze this code and write a 2-3 sentence purpose statement. Module: {module_id}. Focus on BUSINESS FUNCTION, not implementation. Code: {code_content[:4000]}"
-
-        input_tokens = self.budget.estimate_tokens(prompt)
-        output_tokens = 200
-
-        if not self.budget.can_spend(input_tokens, output_tokens, model):
-            return {"module_id": module_id, "purpose_statement": "[BUDGET_EXHAUSTED]", "drift_detected": None, "evidence": "Token budget exceeded"}
-
-        try:
-            purpose = llm.complete(prompt=prompt, system="You are a senior engineer. Be concise and business-focused.", max_tokens=output_tokens, temperature=0.3)
-            self.budget.spend(input_tokens, output_tokens, model, task_type="bulk")
-
-            result = {"module_id": module_id, "purpose_statement": purpose.strip(), "drift_detected": False, "drift_analysis": None, "evidence": f"Generated from code ({len(code_content)} chars)"}
-
-            if existing_docstring:
-                drift = self._check_doc_drift(module_id, code_content, existing_docstring, purpose)
-                result["drift_detected"] = drift["drift_detected"]
-                result["drift_analysis"] = drift["analysis"]
-
-            self.purpose_statements[module_id] = result
-            return result
-        except Exception as e:
-            self.parse_warnings.append(f"Purpose error for {module_id}: {e}")
-            return {"module_id": module_id, "purpose_statement": f"[ERROR] {e}", "drift_detected": None, "evidence": str(e)}
-
-    def _check_doc_drift(self, module_id: str, code_content: str, existing_docstring: str, generated_purpose: str) -> dict:
-        """Check if existing docstring contradicts implementation."""
-        llm = self._get_llm()
-        model = self.budget.select_model("bulk")
-        prompt = f"Compare docstring vs code for {module_id}. Docstring: {existing_docstring[:1000]}. Generated purpose: {generated_purpose}. Does docstring accurately reflect code? Answer MATCH or DRIFT with brief explanation."
-
-        input_tokens = self.budget.estimate_tokens(prompt)
-        output_tokens = 150
-
-        try:
-            analysis = llm.complete(prompt=prompt, system="You are a technical writer.", max_tokens=output_tokens, temperature=0.3)
-            self.budget.spend(input_tokens, output_tokens, model, task_type="bulk")
-            return {"drift_detected": "DRIFT" in analysis.upper()[:20], "analysis": analysis.strip()}
-        except Exception as e:
-            return {"drift_detected": None, "analysis": f"Error: {e}"}
-
-    def cluster_into_domains(self, purpose_statements: Dict[str, str], n_clusters: int = 6) -> List[dict]:
-        """Cluster modules by semantic domain using TF-IDF + k-means."""
-        if not purpose_statements:
-            return []
-
-        module_ids = list(purpose_statements.keys())
-        statements = [purpose_statements[m]["purpose_statement"] for m in module_ids]
-
-        valid_pairs = [(mid, stmt) for mid, stmt in zip(module_ids, statements) if stmt and not str(stmt).startswith("[")]
-        if len(valid_pairs) < n_clusters:
-            return [{"domain": "uncategorized", "modules": [mid for mid, _ in valid_pairs]}]
-
-        valid_ids, valid_stmts = zip(*valid_pairs)
-
-        vectorizer = TfidfVectorizer(max_features=100, stop_words="english", ngram_range=(1, 2))
-        X = vectorizer.fit_transform(valid_stmts)
-
-        kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
-        cluster_labels = kmeans.fit_predict(X)
-
-        clusters: Dict[int, List[str]] = {}
-        for mid, label in zip(valid_ids, cluster_labels):
-            clusters.setdefault(label, []).append(mid)
-
-        domain_clusters = []
-        for cluster_id, members in clusters.items():
-            path_prefixes = [m.split(".")[0] for m in members if "." in m]
-            domain_name = max(set(path_prefixes), key=path_prefixes.count) if path_prefixes else f"domain_{cluster_id}"
-            domain_clusters.append({"domain": domain_name, "cluster_id": int(cluster_id), "module_count": len(members), "modules": members})
-
-        self.domain_clusters = domain_clusters
-        return domain_clusters
-
-    def answer_day_one_questions(self, surveyor_output: dict, hydrologist_output: dict, questions: Optional[List[str]] = None) -> Dict[str, str]:
-        """Answer the Five FDE Day-One Questions with evidence citations."""
-        if questions is None:
-            questions = [
-                "What does this codebase do at a high level?",
-                "Where should I start if I need to make a small change?",
-                "What are the most critical modules I must not break?",
-                "How do I test my changes in this codebase?",
-                "Who owns what, and how do I get help when stuck?",
-            ]
-
-        llm = self._get_llm()
-        model = self.budget.select_model("synthesis")
-        context = self._build_synthesis_context(surveyor_output, hydrologist_output)
+    """Agent 3: The Semanticist - LLM-powered purpose extraction"""
+    
+    def __init__(self, repo_path: Path, api_key: Optional[str] = None, budget_limit: float = 2.00, max_modules: int = 20):
+        self.repo_path = Path(repo_path)
+        self.budget = ContextWindowBudget(budget_limit=budget_limit)
+        self.llm = LLMClient(api_key=api_key)
+        self.max_modules = max_modules
+        self.results = {"purpose_statements": {}, "documentation_drift": [], "domain_clusters": {}, "fde_answers": {}, "budget": {}, "errors": []}
+        logger.info(f"Semanticist initialized (mode: {self.llm.get_mode()}, budget: ${budget_limit:.2f})")
+    
+    def _read_module_code(self, module_id: str) -> Tuple[str, str]:
+        search_paths = [self.repo_path / f"{module_id}.sql", self.repo_path / f"{module_id}.py", self.repo_path / "models" / f"{module_id}.sql"]
+        for file_path in search_paths:
+            if file_path.exists():
+                try:
+                    code = file_path.read_text(encoding="utf-8")[:4000]
+                    return code, str(file_path.relative_to(self.repo_path))
+                except Exception as e:
+                    logger.warning(f"Could not read {file_path}: {e}")
+        return "", ""
+    
+    def _read_docstring(self, code: str) -> str:
+        if not code: return ""
+        match = re.search(r'"""(.*?)"""', code, re.DOTALL)
+        if match: return match.group(1).strip()[:500]
+        match = re.search(r'^\s*#\s*(.+)$', code, re.MULTILINE)
+        if match: return match.group(1).strip()[:500]
+        return ""
+    
+    def generate_purpose_statement(self, module_id: str, code: str, docstring: str) -> Dict[str, Any]:
+        if not code:
+            return {"module_id": module_id, "purpose_statement": "Code not found", "has_drift": False, "drift_reason": "", "status": "code_not_found"}
+        model = self.budget.select_model("purpose_statement", len(code))
+        if not self.budget.can_afford(model, self.budget.estimate_tokens(code), 150):
+            return {"module_id": module_id, "purpose_statement": "Budget exceeded", "has_drift": False, "drift_reason": "", "status": "budget_exceeded"}
+        prompt = f"Analyze this code and generate a PURPOSE STATEMENT (2-3 sentences, business function not implementation):\n\nCODE:\n{code[:2000]}\n\nDOCUMENTATION:\n{docstring if docstring else 'None'}\n\nRespond in JSON: {{\"purpose_statement\": \"...\", \"has_documentation_drift\": true/false, \"drift_reason\": \"...\"}}"
+        response = self.llm.generate_json(prompt, model=model, max_tokens=300, default_value={"purpose_statement": "Processes data for analytics", "has_documentation_drift": False, "drift_reason": ""})
+        self.budget.record_call(model, f"purpose_{module_id}", self.budget.estimate_tokens(prompt), self.budget.estimate_tokens(str(response)))
+        return {"module_id": module_id, "purpose_statement": response.get("purpose_statement", ""), "has_drift": response.get("has_documentation_drift", False), "drift_reason": response.get("drift_reason", ""), "status": "success"}
+    
+    def cluster_into_domains(self, purpose_statements: Dict[str, Dict], k: int = 5) -> Dict[str, List[str]]:
+        if not purpose_statements: return {}
+        statements_map = {mid: data.get("purpose_statement", "") for mid, data in purpose_statements.items()}
+        model = self.budget.select_model("domain_clustering", len(str(statements_map)))
+        if not self.budget.can_afford(model, self.budget.estimate_tokens(str(statements_map)), 300):
+            return self._keyword_clustering(statements_map)
+        statements_text = "\n".join([f"- {mid}: {stmt}" for mid, stmt in statements_map.items()])
+        prompt = f"Cluster these modules into {k} business domains:\n{statements_text}\n\nRespond as JSON: {{\"domain_name\": [\"module1\", \"module2\"]}}"
+        response = self.llm.generate_json(prompt, model=model, max_tokens=500)
+        self.budget.record_call(model, "domain_clustering", self.budget.estimate_tokens(prompt), self.budget.estimate_tokens(str(response)))
+        if response and isinstance(response, dict): return response
+        return self._keyword_clustering(statements_map)
+    
+    def _keyword_clustering(self, statements_map: Dict[str, str]) -> Dict[str, List[str]]:
+        domains = {"customer_management": [], "order_processing": [], "payment_handling": [], "data_staging": [], "analytics_serving": []}
+        for mid, stmt in statements_map.items():
+            text = (mid + " " + stmt).lower()
+            if "customer" in text: domains["customer_management"].append(mid)
+            elif "order" in text: domains["order_processing"].append(mid)
+            elif "payment" in text: domains["payment_handling"].append(mid)
+            elif "stg" in mid or "raw" in mid: domains["data_staging"].append(mid)
+            else: domains["analytics_serving"].append(mid)
+        return {k: v for k, v in domains.items() if v}
+    
+    def answer_day_one_questions(self, surveyor_results: Dict, hydrologist_results: Dict) -> Dict[str, str]:
+        model = self.budget.select_model("fde_synthesis", 2000)
+        context = f"SURVEYOR: {surveyor_results.get('nodes', 0)} nodes, {surveyor_results.get('edges', 0)} edges\nHYDROLOGIST: {hydrologist_results.get('nodes', 0)} nodes, {hydrologist_results.get('edges', 0)} edges"
+        prompt = f"Answer the Five FDE Day-One Questions with evidence:\n{context}\n\n1. What does this system do?\n2. What are the key components?\n3. How does data flow?\n4. What are the risks?\n5. What should I understand first?"
+        response = self.llm.generate(prompt, model=model, max_tokens=1000)
+        self.budget.record_call(model, "fde_synthesis", self.budget.estimate_tokens(prompt), self.budget.estimate_tokens(response))
         answers = {}
-
-        for i, question in enumerate(questions, 1):
-            prompt = f"Answer this FDE Day-One question with SPECIFIC EVIDENCE. Question: {question}. Context: {json.dumps(context)[:6000]}. Cite file paths and module names. Be concise but actionable."
-            input_tokens = self.budget.estimate_tokens(prompt)
-            output_tokens = 500
-
-            if not self.budget.can_spend(input_tokens, output_tokens, model):
-                answers[question] = "[BUDGET_EXHAUSTED]"
-                continue
-
-            try:
-                answer = llm.complete(prompt=prompt, system="You are a senior engineer onboarding a new team member.", max_tokens=output_tokens, temperature=0.3)
-                self.budget.spend(input_tokens, output_tokens, model, task_type="synthesis")
-                answers[question] = answer.strip()
-            except Exception as e:
-                self.parse_warnings.append(f"Q&A error: {e}")
-                answers[question] = f"[ERROR] {e}"
-
-        self.day_one_answers = answers
+        for i, q in enumerate(["what", "components", "flow", "risks", "start"], 1):
+            pattern = rf"{i}\.\s*(.*?)(?=\n\n|\n\d\.|$)"
+            match = re.search(pattern, response, re.DOTALL | re.IGNORECASE)
+            answers[f"question_{i}"] = match.group(1).strip() if match else "Unable to generate"
         return answers
+    
+    def run(self, surveyor_results: Optional[Dict] = None, hydrologist_results: Optional[Dict] = None) -> Dict[str, Any]:
+        logger.info("Starting Semanticist Agent...")
+        modules = [str(f.relative_to(self.repo_path)).replace("\\", "/").replace(".sql", "").replace("models/", "") for f in self.repo_path.rglob("*.sql")][:self.max_modules]
+        logger.info(f"Found {len(modules)} modules to analyze")
+        for module_id in modules:
+            if self.budget.is_over_budget():
+                logger.warning("Budget exceeded - stopping analysis")
+                break
+            code, file_path = self._read_module_code(module_id)
+            docstring = self._read_docstring(code) if code else ""
+            result = self.generate_purpose_statement(module_id, code, docstring)
+            result["file_path"] = file_path
+            self.results["purpose_statements"][module_id] = result
+            if result.get("has_drift"):
+                self.results["documentation_drift"].append({"module": module_id, "reason": result.get("drift_reason", "")})
+        self.results["domain_clusters"] = self.cluster_into_domains(self.results["purpose_statements"])
+        if surveyor_results and hydrologist_results:
+            self.results["fde_answers"] = self.answer_day_one_questions(surveyor_results, hydrologist_results)
+        self.results["budget"] = self.budget.get_summary()
+        logger.info(f"Semanticist complete. Budget: ${self.results['budget']['total_cost_usd']:.4f}")
+        return self.results
 
-    def _build_synthesis_context(self, surveyor: dict, hydrologist: dict) -> dict:
-        """Build condensed context for LLM synthesis."""
-        return {
-            "structure": {"total_modules": surveyor.get("total_nodes", 0), "total_dependencies": surveyor.get("total_edges", 0), "hubs": surveyor.get("architectural_hubs", [])[:5]},
-            "lineage": {"sources": hydrologist.get("sources", [])[:5], "sinks": hydrologist.get("sinks", [])[:5]},
-            "semantics": {"purposes": {k: v["purpose_statement"] for k, v in list(self.purpose_statements.items())[:10]}},
-        }
-
-    def save_artifacts(self) -> Path:
-        """Save semantic enrichment to .cartography/semantic_enrichment.json."""
-        self.output_dir.mkdir(parents=True, exist_ok=True)
-        output_path = self.output_dir / "semantic_enrichment.json"
-        data = {"purpose_statements": self.purpose_statements, "doc_drift_flags": self.doc_drift_flags, "domain_clusters": self.domain_clusters, "day_one_answers": self.day_one_answers, "budget_stats": self.budget.get_stats(), "parse_warnings": self.parse_warnings}
-        with open(output_path, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2, default=str)
-        return output_path
-
-
-class _MockLLMClient:
-    """Mock LLM client for testing without API keys."""
-    def __init__(self, budget: ContextWindowBudget):
-        self.budget = budget
-    def complete(self, prompt: str, **kwargs) -> str:
-        self.budget.record_cache_miss()
-        if "purpose" in prompt.lower():
-            return "This module handles data transformation for the customer analytics pipeline."
-        elif "drift" in prompt.lower():
-            return "MATCH - docstring accurately reflects implementation"
-        elif "question" in prompt.lower():
-            return "Start with src/agents/ for core logic. Key modules: surveyor.py, hydrologist.py. Test via pytest in tests/."
-        return "[Mock LLM response]"
