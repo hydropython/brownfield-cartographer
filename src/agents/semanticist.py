@@ -1,4 +1,4 @@
-"""
+﻿"""
 Semanticist Agent - Complete LLM-Powered Purpose Analyst
 """
 
@@ -10,6 +10,70 @@ import re
 
 
 logger = logging.getLogger(__name__)
+
+
+# ============================================================================
+# STUB CLASSES - Replace with real LLM integration when ready
+# ============================================================================
+
+class ContextWindowBudget:
+    """Simple stub for budget tracking"""
+    def __init__(self, budget_limit=2.00):
+        self.budget_limit = budget_limit
+        self.total_cost = 0.0
+        self.calls = []
+    
+    def select_model(self, task, token_count):
+        # Return a simple model name
+        return "stub-model"
+    
+    def can_afford(self, model, input_tokens, output_tokens):
+        # Always allow for stub
+        return True
+    
+    def estimate_tokens(self, text):
+        # Simple estimate: ~4 chars per token
+        return len(str(text)) // 4
+    
+    def record_call(self, model, purpose, input_tokens, output_tokens):
+        self.calls.append({"model": model, "purpose": purpose, "tokens": input_tokens + output_tokens})
+        # Stub cost: .0001 per token
+        self.total_cost += (input_tokens + output_tokens) * 0.0001
+    
+    def is_over_budget(self):
+        return self.total_cost > self.budget_limit
+    
+    def get_summary(self):
+        return {
+            "total_cost_usd": self.total_cost,
+            "budget_limit_usd": self.budget_limit,
+            "calls_made": len(self.calls),
+            "under_budget": not self.is_over_budget()
+        }
+
+
+class LLMClient:
+    """Simple stub for LLM calls"""
+    def __init__(self, api_key=None):
+        self.api_key = api_key
+        self.mode = "stub"
+    
+    def get_mode(self):
+        return self.mode
+    
+    def generate_json(self, prompt, model=None, max_tokens=300, default_value=None):
+        # Return default or stub response
+        if default_value:
+            return default_value
+        return {"purpose_statement": "Processes data for analytics", "has_documentation_drift": False, "drift_reason": ""}
+    
+    def generate(self, prompt, model=None, max_tokens=1000):
+        # Return stub synthesis
+        return """1. This system processes customer and order data through a dbt-based transformation pipeline.
+2. Key components: seed tables (raw data), staging models (cleaning), mart models (analytics).
+3. Data flows: seeds  staging  marts, with tests validating quality at each stage.
+4. Risks: documentation drift, untested transformations, unclear module purposes.
+5. Start by reviewing the domain clusters and purpose statements for key modules."""
 
 
 class SemanticistAgent:
@@ -75,7 +139,8 @@ class SemanticistAgent:
             elif "payment" in text: domains["payment_handling"].append(mid)
             elif "stg" in mid or "raw" in mid: domains["data_staging"].append(mid)
             else: domains["analytics_serving"].append(mid)
-        return {k: v for k, v in domains.items() if v}
+        # Filter out empty clusters AND ensure keys are domain names, not result keys
+return {k: v for k, v in domains.items() if v and isinstance(k, str) and k not in ['purpose_statement', 'has_documentation_drift', 'drift_reason']}
     
     def answer_day_one_questions(self, surveyor_results: Dict, hydrologist_results: Dict) -> Dict[str, str]:
         model = self.budget.select_model("fde_synthesis", 2000)
@@ -111,4 +176,6 @@ class SemanticistAgent:
         self.results["budget"] = self.budget.get_summary()
         logger.info(f"Semanticist complete. Budget: ${self.results['budget']['total_cost_usd']:.4f}")
         return self.results
+
+
 
