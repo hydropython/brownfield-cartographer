@@ -71,16 +71,118 @@ main.dashboard {
 
     <main class="dashboard">
         <!-- Overview Tab -->
+                <!-- Overview Tab - Reorganized -->
+                <!-- Overview Tab - Clean & Professional -->
         <section id="overview" class="tab-content active">
-            <div class="summary-cards">
-                <div class="card"><h3><i class="fas fa-sitemap"></i> Surveyor</h3><div class="metric"><span id="s-nodes">-</span> nodes</div><div class="metric"><span id="s-edges">-</span> edges</div><div class="confidence high">100% high confidence</div></div>
-                <div class="card"><h3><i class="fas fa-water"></i> Hydrologist</h3><div class="metric"><span id="h-nodes">-</span> nodes</div><div class="metric"><span id="h-edges">-</span> edges</div><div class="confidence" id="h-conf">-</div></div>
-                <div class="card"><h3><i class="fas fa-bullseye"></i> Key Insights</h3><ul class="insights"><li> Seeds correctly identified</li><li> CTE hallucination resolved</li><li> Blast radius: 17 downstream</li></ul></div>
+            <div class="agent-header" style="text-align: center; padding: 2rem 0;">
+                <h2 style="font-size: 2rem; color: #1a1a2e; margin-bottom: 0.5rem;"><i class="fas fa-home"></i> Brownfield Cartographer</h2>
+                <p style="color: #666; font-size: 1.1rem;">AI-powered codebase analysis for brownfield projects</p>
             </div>
-            <div class="quick-actions">
-                <button class="btn-primary" onclick="switchTab('surveyor')"><i class="fas fa-eye"></i> View Surveyor</button>
-                <button class="btn-primary" onclick="switchTab('hydrologist')"><i class="fas fa-eye"></i> View Hydrologist</button>
-                <button class="btn-secondary" onclick="exportData()"><i class="fas fa-download"></i> Export</button>
+            
+            <!-- 1. REPO INPUT - Compact & Clean -->
+            <div style="max-width: 700px; margin: 2rem auto; padding: 0;">
+                <div style="display: flex; gap: 0.75rem; box-shadow: 0 2px 12px rgba(0,0,0,0.1); border-radius: 8px; overflow: hidden; border: 1px solid #e0e0e0;">
+                    <input type="text" id="repo-url-input" placeholder="https://github.com/username/repo.git" 
+                           style="flex: 1; padding: 0.875rem 1.25rem; border: none; font-size: 0.95rem; outline: none; background: #fafafa;">
+                    <button id="analyze-btn" 
+                            style="padding: 0.875rem 1.75rem; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; font-size: 0.95rem; cursor: pointer; font-weight: 600; white-space: nowrap;">
+                        Analyze
+                    </button>
+                </div>
+                <p style="text-align: center; color: #888; font-size: 0.85rem; margin-top: 0.75rem;">
+                     Try: <code style="background: #f0f0f0; padding: 0.2rem 0.5rem; border-radius: 3px; cursor: pointer;" onclick="document.getElementById('repo-url-input').value='https://github.com/dbt-labs/jaffle_shop.git'">dbt-labs/jaffle_shop</code>
+                </p>
+                <div id="repo-status" style="margin-top: 1rem; padding: 0.75rem 1rem; border-radius: 6px; font-size: 0.9rem; display: none;"></div>
+            </div>
+            
+            <!-- 2. ANALYSIS LOGS - Terminal Style -->
+            <div id="analysis-logs-section" style="max-width: 900px; margin: 2rem auto; display: none;">
+                <h4 style="color: #1a1a2e; margin-bottom: 0.75rem; font-size: 1rem;"><i class="fas fa-terminal"></i> Analysis Progress</h4>
+                <div id="analysis-logs" style="background: #1e1e1e; color: #00ff00; padding: 1rem; border-radius: 6px; font-family: 'Consolas', monospace; font-size: 0.8rem; max-height: 200px; overflow-y: auto; border: 1px solid #333;"></div>
+            </div>
+            
+            <!-- 3. AGENT RESULTS - Clean Cards -->
+            <div id="agent-results-section" style="max-width: 1100px; margin: 2rem auto; display: none;">
+                <h3 style="color: #1a1a2e; margin-bottom: 1.5rem; font-size: 1.2rem; text-align: center;"><i class="fas fa-chart-line"></i> Analysis Complete</h3>
+                
+                <!-- Stats Row -->
+                <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 2rem;">
+                    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 1.25rem; border-radius: 8px; text-align: center;">
+                        <div style="font-size: 1.75rem; font-weight: bold;" id="stat-nodes">0</div>
+                        <div style="font-size: 0.85rem; opacity: 0.9;">Nodes</div>
+                    </div>
+                    <div style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: white; padding: 1.25rem; border-radius: 8px; text-align: center;">
+                        <div style="font-size: 1.75rem; font-weight: bold;" id="stat-edges">0</div>
+                        <div style="font-size: 0.85rem; opacity: 0.9;">Edges</div>
+                    </div>
+                    <div style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); color: white; padding: 1.25rem; border-radius: 8px; text-align: center;">
+                        <div style="font-size: 1.75rem; font-weight: bold;" id="stat-modules">0</div>
+                        <div style="font-size: 0.85rem; opacity: 0.9;">Modules</div>
+                    </div>
+                    <div style="background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%); color: white; padding: 1.25rem; border-radius: 8px; text-align: center;">
+                        <div style="font-size: 1.75rem; font-weight: bold;" id="stat-drift">0</div>
+                        <div style="font-size: 0.85rem; opacity: 0.9;">Drift</div>
+                    </div>
+                </div>
+                
+                <!-- Agent Cards -->
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.25rem;">
+                    <!-- Agent 1 -->
+                    <div class="card" style="border-left: 4px solid #3498db; padding: 1.25rem; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
+                        <h4 style="color: #3498db; margin: 0 0 0.5rem 0; font-size: 1rem;"><i class="fas fa-sitemap"></i> Surveyor</h4>
+                        <p style="color: #888; font-size: 0.8rem; margin: 0 0 1rem 0;">Module dependencies & architecture</p>
+                        <div style="font-size: 0.9rem; color: #333;">
+                            <div><strong>Nodes:</strong> <span id="a1-nodes">-</span></div>
+                            <div><strong>Edges:</strong> <span id="a1-edges">-</span></div>
+                        </div>
+                        <button onclick="document.querySelector('[data-tab='surveyor']').click()" 
+                                style="margin-top: 1rem; width: 100%; padding: 0.5rem; background: #3498db; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.85rem;">
+                            View Details
+                        </button>
+                    </div>
+                    
+                    <!-- Agent 2 -->
+                    <div class="card" style="border-left: 4px solid #9b59b6; padding: 1.25rem; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
+                        <h4 style="color: #9b59b6; margin: 0 0 0.5rem 0; font-size: 1rem;"><i class="fas fa-water"></i> Hydrologist</h4>
+                        <p style="color: #888; font-size: 0.8rem; margin: 0 0 1rem 0;">Data lineage & SQL flow</p>
+                        <div style="font-size: 0.9rem; color: #333;">
+                            <div><strong>Nodes:</strong> <span id="a2-nodes">-</span></div>
+                            <div><strong>Edges:</strong> <span id="a2-edges">-</span></div>
+                        </div>
+                        <button onclick="document.querySelector('[data-tab='hydrologist']').click()" 
+                                style="margin-top: 1rem; width: 100%; padding: 0.5rem; background: #9b59b6; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.85rem;">
+                            View Details
+                        </button>
+                    </div>
+                    
+                    <!-- Agent 3 -->
+                    <div class="card" style="border-left: 4px solid #e74c3c; padding: 1.25rem; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
+                        <h4 style="color: #e74c3c; margin: 0 0 0.5rem 0; font-size: 1rem;"><i class="fas fa-brain"></i> Semanticist</h4>
+                        <p style="color: #888; font-size: 0.8rem; margin: 0 0 1rem 0;">LLM purpose analysis</p>
+                        <div style="font-size: 0.9rem; color: #333;">
+                            <div><strong>Modules:</strong> <span id="a3-modules">-</span></div>
+                            <div><strong>Drift:</strong> <span id="a3-drift">-</span></div>
+                        </div>
+                        <button onclick="document.querySelector('[data-tab='semanticist']').click()" 
+                                style="margin-top: 1rem; width: 100%; padding: 0.5rem; background: #e74c3c; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.85rem;">
+                            View Details
+                        </button>
+                    </div>
+                    
+                    <!-- Agent 4 -->
+                    <div class="card" style="border-left: 4px solid #f39c12; padding: 1.25rem; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
+                        <h4 style="color: #f39c12; margin: 0 0 0.5rem 0; font-size: 1rem;"><i class="fas fa-archive"></i> Archivist</h4>
+                        <p style="color: #888; font-size: 0.8rem; margin: 0 0 1rem 0;">Artifact extraction</p>
+                        <div style="font-size: 0.9rem; color: #333;">
+                            <div><strong>Artifacts:</strong> <span id="a4-artifacts">-</span></div>
+                            <div><strong>Patterns:</strong> <span id="a4-patterns">-</span></div>
+                        </div>
+                        <button onclick="document.querySelector('[data-tab='archivist']').click()" 
+                                style="margin-top: 1rem; width: 100%; padding: 0.5rem; background: #f39c12; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.85rem;">
+                            View Details
+                        </button>
+                    </div>
+                </div>
             </div>
         </section>
 
@@ -177,6 +279,8 @@ main.dashboard {
         
     </body>
 </html>
+
+
 
 
 
