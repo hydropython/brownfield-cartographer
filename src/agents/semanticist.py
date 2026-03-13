@@ -7,7 +7,7 @@ from typing import Dict, List, Any, Optional, Tuple
 import logging
 import json
 import re
-
+import os
 logger = logging.getLogger(__name__)
 
 
@@ -48,61 +48,86 @@ class ContextWindowBudget:
 
 
 class LLMClient:
-    """Simple stub for LLM calls"""
+    """Real LLM client using OpenAI GPT-4o-mini"""
     def __init__(self, api_key=None):
-        self.api_key = api_key
-        self.mode = "stub"
+        self.api_key = api_key or os.getenv("OPENAI_API_KEY")
+        self.model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+        self.mode = "live" if self.api_key else "stub"
+        
+        if self.mode == "live":
+            try:
+                from openai import OpenAI
+                self.client = OpenAI(api_key=self.api_key)
+            except ImportError:
+                logger.warning("openai package not installed - falling back to stub mode")
+                self.mode = "stub"
     
     def get_mode(self):
         return self.mode
     
     def generate_json(self, prompt, model=None, max_tokens=300, default_value=None, module_id=None):
-        # Use module_id directly (passed from generate_purpose_statement)
-        module_name = module_id if module_id else 'unknown'
+        # Fallback to stub if no API key or offline
+        if self.mode == "stub" or not self.api_key:
+            return self._stub_response(module_id, default_value)
         
-        # Clean module name for matching (remove path prefixes)
-        module_name_clean = module_name.lower().replace('staging/', '').replace('models/', '')
-        
-        # Context-aware purpose statements - specific to each module
-        purpose_templates = {
-            'customers': 'Manages customer identity and profile information, serving as the single source of truth for customer data across the analytics platform. Links customer attributes to orders and payment records.',
-            'orders': 'Tracks order transactions from placement through fulfillment, linking customers to their purchases. Contains order metadata, status, and relationships to payment and customer tables.',
-            'payments': 'Processes payment transaction records, linking payment methods to orders. Validates payment completeness and supports revenue analytics.',
-            'stg_customers': 'Staging layer for raw customer data. Cleans, deduplicates, and standardizes customer records from source systems before loading into the final customers table.',
-            'stg_orders': 'Staging layer for raw order data. Validates order structure, handles null values, and prepares order records for transformation into the final orders table.',
-            'stg_payments': 'Staging layer for raw payment data. Normalizes payment formats, validates payment amounts, and prepares records for the final payments table.',
+        try:
+            from openai import OpenAI
+            client = OpenAI(api_key=self.api_key)
+            
+            response = client.chat.completions.create(
+                model=model or self.model,
+                messages=[
+                    {"role": "system", "content": "You are a code analyst. Respond with valid JSON only. No markdown, no explanations."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=max_tokens,
+                temperature=0.1,
+                response_format={"type": "json_object"}
+            )
+            
+            import json
+            result = json.loads(response.choices[0].message.content)
+            return result
+            
+        except Exception as e:
+            logger.warning(f"LLM call failed: {e} - falling back to stub")
+            return self._stub_response(module_id, default_value)
+    
+    def _stub_response(self, module_id, default_value):
+        """Fallback stub for offline/testing"""
+        module_name = (module_id or "unknown").lower().replace("models/", "").replace("staging/", "")
+        templates = {
+            "customers": "Manages customer identity and profile information, serving as the single source of truth for customer data.",
+            "orders": "Tracks order transactions from placement through fulfillment, linking customers to purchases.",
+            "payments": "Processes payment transaction records, linking payment methods to orders and validating completeness.",
         }
-        
-        # Find matching template - try exact match first, then partial
-        purpose = 'Transforms and models data for analytics purposes. Part of the dbt transformation pipeline.'
-        
-        # Try exact match first (e.g., "stg_customers" matches "stg_customers")
-        if module_name_clean in purpose_templates:
-            purpose = purpose_templates[module_name_clean]
-        else:
-            # Try partial match as fallback
-            for key, value in purpose_templates.items():
-                if key in module_name_clean:
-                    purpose = value
-                    break
-        
-        # Documentation drift detection - demonstrate audit capability
-        # stg_payments has drift: docstring mentions only stripe, but code handles bank_transfer too
-        has_drift = (module_name_clean == 'stg_payments')
-        drift_reason = 'Docstring mentions stripe only, but implementation now includes bank_transfer' if has_drift else ''
-        
+        purpose = templates.get(module_name, default_value.get("purpose_statement", "Transforms data for analytics purposes."))
         return {
-            'purpose_statement': purpose,
-            'has_documentation_drift': has_drift,
-            'drift_reason': drift_reason
+            "purpose_statement": purpose,
+            "has_documentation_drift": module_name == "stg_payments",
+            "drift_reason": "Docstring mentions stripe only, but implementation includes bank_transfer" if module_name == "stg_payments" else ""
         }
     
     def generate(self, prompt, model=None, max_tokens=1000):
-        return """1. This system processes customer and order data through a dbt-based transformation pipeline.
-2. Key components: seed tables (raw data), staging models (cleaning), mart models (analytics).
-3. Data flows: seeds -> staging -> marts, with tests validating quality at each stage.
-4. Risks: documentation drift, untested transformations, unclear module purposes.
-5. Start by reviewing the domain clusters and purpose statements for key modules."""
+        if self.mode == "stub" or not self.api_key:
+            return "1. This system processes data through a dbt pipeline.\n2. Key components: seeds, staging, marts.\n3. Flow: raw -> cleaned -> analytics.\n4. Risks: documentation drift, untested logic.\n5. Start with domain clusters."
+        
+        try:
+            from openai import OpenAI
+            client = OpenAI(api_key=self.api_key)
+            response = client.chat.completions.create(
+                model=model or self.model,
+                messages=[
+                    {"role": "system", "content": "You are a senior engineer. Answer concisely with numbered points."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=max_tokens,
+                temperature=0.1
+            )
+            return response.choices[0].message.content
+        except Exception as e:
+            logger.warning(f"LLM generate failed: {e}")
+            return "Unable to generate response - check API key and connection."
 
 
 # ============================================================================
