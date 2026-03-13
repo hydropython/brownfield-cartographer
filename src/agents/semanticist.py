@@ -186,6 +186,7 @@ class SemanticistAgent:
         logger.info("Starting Semanticist Agent...")
         modules = [str(f.relative_to(self.repo_path)).replace("\\", "/").replace(".sql", "").replace("models/", "") for f in self.repo_path.rglob("*.sql")][:self.max_modules]
         logger.info(f"Found {len(modules)} modules to analyze")
+        
         for module_id in modules:
             if self.budget.is_over_budget():
                 logger.warning("Budget exceeded - stopping analysis")
@@ -197,10 +198,30 @@ class SemanticistAgent:
             self.results["purpose_statements"][module_id] = result
             if result.get("has_drift"):
                 self.results["documentation_drift"].append({"module": module_id, "reason": result.get("drift_reason", "")})
+        
         self.results["domain_clusters"] = self.cluster_into_domains(self.results["purpose_statements"])
+        
         if surveyor_results and hydrologist_results:
             self.results["fde_answers"] = self.answer_day_one_questions(surveyor_results, hydrologist_results)
+        
         self.results["budget"] = self.budget.get_summary()
+        
+        # === NEW: Save results to refined_audit folder for persistence ===
+        try:
+            audit_path = Path(self.repo_path.parent) / "refined_audit" / "purpose_statements"
+            audit_path.mkdir(parents=True, exist_ok=True)
+            
+            for module_id, data in self.results["purpose_statements"].items():
+                safe_name = module_id.replace("/", "_").replace("\\", "_")
+                file_path = audit_path / f"{safe_name}_purpose.json"
+                with open(file_path, "w", encoding="utf-8") as f:
+                    json.dump(data, f, indent=2)
+            
+            logger.info(f"Saved purpose statements to {audit_path}")
+        except Exception as e:
+            logger.warning(f"Could not save to refined_audit: {e}")
+        # === END NEW ===
+        
         logger.info(f"Semanticist complete. Budget: ${self.results['budget']['total_cost_usd']:.4f}")
         return self.results
 
