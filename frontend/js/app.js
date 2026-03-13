@@ -151,7 +151,7 @@ async function renderSemanticist() {
                 html += '<strong style="color:#2c3e50">' + id + '</strong>';
                 html += '<p style="margin:0.5rem 0 0 0;color:#555;font-size:0.9rem">' + purpose + '</p>';
                 if (file) {
-                    html += '<div style="margin-top:0.5rem;font-size:0.8rem;color:#7f8c8d"> ' + file + '</div>';
+                    html += '<div style="margin-top:0.5rem;font-size:0.8rem;color:#7f8c8d;cursor:pointer;user-select:all" title="Click to copy" onclick="navigator.clipboard.writeText(\''+file.replace(/'/g, "\\'")+'\'); var el=this; el.style.color=\'#27ae60\'; el.innerHTML=\'✅ Copied!\'; setTimeout(() => { el.style.color=\'#7f8c8d\'; el.innerHTML=\' 📁 '+file+'\'; }, 1200)">📁 ' + file + '</div>';
                 }
                 html += '</div>';
             }
@@ -332,6 +332,13 @@ async function renderSemanticist() {
                 html += '<div style="background:#fff;border:1px solid #e0e0e0;border-left:4px solid #3498db;padding:1.2rem;border-radius:6px;box-shadow:0 2px 6px rgba(0,0,0,0.08)">';
                 html += '<div style="font-weight:700;color:#1a1a2e;margin-bottom:0.75rem;font-size:1.05rem">'+id+'</div>';
                 html += '<div style="color:#333;line-height:1.6;font-size:0.95rem">'+purpose+'</div>';
+                                // Add drift warning if flagged
+                if (data.has_drift) {
+                    html += '<div style="margin-top:1rem;padding:0.75rem;background:#fff3cd;border-left:3px solid #f39c12;border-radius:4px">';
+                    html += '<div style="font-weight:600;color:#856404;font-size:0.85rem">⚠️ Documentation Drift</div>';
+                    html += '<div style="color:#856404;font-size:0.85rem;margin-top:0.25rem">' + (data.drift_reason || 'Documentation does not match implementation') + '</div>';
+                    html += '</div>';
+                }
                 if (file) {
                     html += '<div style="margin-top:0.75rem;padding:0.4rem 0.6rem;background:#f5f5f5;border-radius:4px;font-size:0.85rem;color:#666"> '+file+'</div>';
                 }
@@ -406,3 +413,4 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log(' Semanticist tab listener attached');
     }
 });
+
