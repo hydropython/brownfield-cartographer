@@ -123,3 +123,286 @@ document.addEventListener('DOMContentLoaded', loadOverview);
 
 
 
+
+
+
+
+// Agent 3: Semanticist - Render purpose statements and domain clusters
+async function renderSemanticist() {
+    console.log('Loading Semanticist...');
+    try {
+        const [purposesRes, domainsRes] = await Promise.all([
+            fetch('/api/agent/semanticist/purposes'),
+            fetch('/api/agent/semanticist/domains')
+        ]);
+        const purposes = await purposesRes.json();
+        const domains = await domainsRes.json();
+        
+        console.log('Semanticist data:', purposes, domains);
+        
+        // Display purpose statements
+        const listDiv = document.getElementById('purpose-list-content');
+        if (listDiv && purposes.purposes) {
+            let html = '';
+            for (const [id, data] of Object.entries(purposes.purposes)) {
+                const purpose = data.purpose_statement || 'No purpose statement';
+                const file = data.file_path || '';
+                html += '<div style="background:#f8f9fa;padding:1rem;border-radius:8px;border-left:3px solid #3498db;margin-bottom:1rem">';
+                html += '<strong style="color:#2c3e50">' + id + '</strong>';
+                html += '<p style="margin:0.5rem 0 0 0;color:#555;font-size:0.9rem">' + purpose + '</p>';
+                if (file) {
+                    html += '<div style="margin-top:0.5rem;font-size:0.8rem;color:#7f8c8d"> ' + file + '</div>';
+                }
+                html += '</div>';
+            }
+            listDiv.innerHTML = html;
+        }
+        
+        // Display domain clusters
+        const vizDiv = document.getElementById('semanticist-viz');
+        if (vizDiv && domains.clusters) {
+            let clusterHTML = '';
+            for (const [domain, modules] of Object.entries(domains.clusters)) {
+                if (typeof domain === 'string' && !['purpose_statement','has_documentation_drift','drift_reason'].includes(domain)) {
+                    clusterHTML += '<div style="margin:1rem 0;padding:1rem;background:#f8f9fa;border-radius:8px;border-left:3px solid #27ae60">';
+                    clusterHTML += '<h4 style="margin:0 0 0.5rem 0;color:#2c3e50"> ' + domain + '</h4>';
+                    clusterHTML += '<div style="display:flex;flex-wrap:wrap;gap:0.5rem">';
+                    for (const m of modules) {
+                        clusterHTML += '<span style="background:#3498db;color:white;padding:0.25rem 0.5rem;border-radius:4px;font-size:0.85rem">' + m + '</span>';
+                    }
+                    clusterHTML += '</div></div>';
+                }
+            }
+            vizDiv.innerHTML = '<div style="padding:1rem">' + clusterHTML + '</div>';
+        }
+        
+        console.log(' Semanticist rendered');
+    } catch (e) {
+        console.error(' Semanticist error:', e);
+    }
+}
+
+
+// Agent 3 tab click listener
+document.addEventListener('DOMContentLoaded', function() {
+    const semBtn = document.querySelector('.tab-btn[data-tab="semanticist"]');
+    if (semBtn) {
+        semBtn.addEventListener('click', function() {
+            console.log('Agent 3 tab clicked');
+            setTimeout(function() {
+                if (typeof renderSemanticist === 'function') {
+                    renderSemanticist();
+                }
+            }, 100);
+        });
+    }
+});
+
+// Agent 3: Semanticist - Simple render function
+async function renderSemanticist() {
+    console.log('=== SEMANTICIST RENDER START ===');
+    try {
+        const purposesRes = await fetch('/api/agent/semanticist/purposes');
+        const purposesData = await purposesRes.json();
+        console.log('API Response:', purposesData);
+        
+        const purposes = purposesData.purposes || {};
+        console.log('Purposes count:', Object.keys(purposes).length);
+        console.log('Purposes keys:', Object.keys(purposes));
+        
+        const listDiv = document.getElementById('purpose-list-content');
+        console.log('listDiv exists:', listDiv !== null);
+        
+        if (listDiv && Object.keys(purposes).length > 0) {
+            let html = '<h4 style="margin-bottom:1rem;color:#2c3e50">Purpose Statements</h4>';
+            for (const [id, data] of Object.entries(purposes)) {
+                const purpose = data.purpose_statement || 'No statement';
+                const file = data.file_path || '';
+                html += '<div style="background:#fff;border:1px solid #e0e0e0;padding:1rem;border-radius:8px;margin-bottom:1rem">';
+                html += '<strong>' + id + '</strong><br>';
+                html += '<small style="color:#555">' + purpose + '</small>';
+                if (file) html += '<br><small style="color:#7f8c8d"> ' + file + '</small>';
+                html += '</div>';
+            }
+            listDiv.innerHTML = html;
+            console.log(' Purpose statements rendered');
+        } else if (listDiv) {
+            listDiv.innerHTML = '<p>No purposes data</p>';
+            console.log(' No purposes to render');
+        }
+        
+        console.log('=== SEMANTICIST RENDER END ===');
+    } catch (e) {
+        console.error(' Error:', e);
+    }
+}
+
+// Tab listener
+document.addEventListener('DOMContentLoaded', function() {
+    const semBtn = document.querySelector('.tab-btn[data-tab="semanticist"]');
+    if (semBtn) {
+        semBtn.addEventListener('click', function() {
+            console.log('Tab clicked, calling renderSemanticist');
+            setTimeout(renderSemanticist, 100);
+        });
+    }
+});
+
+
+
+
+
+// Ensure semanticist tab activates properly
+document.addEventListener('DOMContentLoaded', function() {
+    const semBtn = document.querySelector('.tab-btn[data-tab="semanticist"]');
+    const semSection = document.getElementById('semanticist');
+    
+    if (semBtn && semSection) {
+        semBtn.addEventListener('click', function() {
+            // Remove active from all tabs
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(s => {
+                s.classList.remove('active');
+                s.style.display = 'none';
+            });
+            
+            // Activate semanticist
+            semBtn.classList.add('active');
+            semSection.classList.add('active');
+            semSection.style.display = 'block';
+            
+            // Render content after a short delay
+            setTimeout(function() {
+                if (typeof renderSemanticist === 'function') {
+                    renderSemanticist();
+                }
+            }, 50);
+        });
+    }
+});
+
+
+
+
+
+
+// ============================================================================
+// AGENT 3: SEMANTICIST - Clean Render Function
+// ============================================================================
+
+async function renderSemanticist() {
+    console.log('=== SEMANTICIST RENDER (CLEAN) ===');
+    
+    const vizDiv = document.getElementById('semanticist-viz');
+    if (!vizDiv) {
+        console.error(' semanticist-viz not found');
+        return;
+    }
+    
+    // Show loading
+    vizDiv.innerHTML = '<div style="padding:2rem;text-align:center;color:#3498db;font-size:1.2rem"> Loading...</div>';
+    
+    try {
+        const [pRes, dRes] = await Promise.all([
+            fetch('/api/agent/semanticist/purposes'),
+            fetch('/api/agent/semanticist/domains')
+        ]);
+        
+        const pData = await pRes.json();
+        const dData = await dRes.json();
+        
+        console.log(' Purposes:', pData);
+        console.log(' Domains:', dData);
+        
+        // Build HTML
+        let html = '<div style="padding:1.5rem;font-family:system-ui,sans-serif">';
+        
+        // PURPOSES SECTION
+        html += '<div style="margin-bottom:2rem">';
+        html += '<h3 style="color:#1a1a2e;margin-bottom:1rem;font-size:1.3rem;border-bottom:3px solid #3498db;padding-bottom:0.5rem"> Purpose Statements</h3>';
+        
+        if (pData.purposes && Object.keys(pData.purposes).length > 0) {
+            html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(350px,1fr));gap:1rem">';
+            
+            for (const [id, data] of Object.entries(pData.purposes)) {
+                // Handle different data structures
+                const purpose = data?.purpose_statement || data?.purpose || String(data);
+                const file = data?.file_path || data?.file || '';
+                
+                html += '<div style="background:#fff;border:1px solid #e0e0e0;border-left:4px solid #3498db;padding:1.2rem;border-radius:6px;box-shadow:0 2px 6px rgba(0,0,0,0.08)">';
+                html += '<div style="font-weight:700;color:#1a1a2e;margin-bottom:0.75rem;font-size:1.05rem">'+id+'</div>';
+                html += '<div style="color:#333;line-height:1.6;font-size:0.95rem">'+purpose+'</div>';
+                if (file) {
+                    html += '<div style="margin-top:0.75rem;padding:0.4rem 0.6rem;background:#f5f5f5;border-radius:4px;font-size:0.85rem;color:#666"> '+file+'</div>';
+                }
+                html += '</div>';
+            }
+            html += '</div>';
+        } else {
+            html += '<p style="color:#7f8c8d;padding:1rem;background:#f8f9fa;border-radius:6px">No purpose statements available</p>';
+        }
+        
+        html += '</div>';
+        
+        // DOMAINS SECTION
+        html += '<div>';
+        html += '<h3 style="color:#1a1a2e;margin-bottom:1rem;font-size:1.3rem;border-bottom:3px solid #27ae60;padding-bottom:0.5rem"> Domain Clusters</h3>';
+        
+        if (dData.clusters && Object.keys(dData.clusters).length > 0) {
+            for (const [domain, modules] of Object.entries(dData.clusters)) {
+                if (typeof domain === 'string' && domain.length > 2 && !domain.includes('purpose') && !domain.includes('drift')) {
+                    html += '<div style="margin:1rem 0;padding:1.2rem;background:#f8f9fa;border-radius:8px;border-left:4px solid #27ae60">';
+                    html += '<div style="font-weight:700;color:#1a1a2e;margin-bottom:0.75rem;font-size:1.1rem;text-transform:capitalize">'+domain.replace(/_/g,' ')+'</div>';
+                    html += '<div style="display:flex;flex-wrap:wrap;gap:0.5rem">';
+                    if (Array.isArray(modules)) {
+                        for (const m of modules) {
+                            html += '<span style="background:#3498db;color:#fff;padding:0.35rem 0.7rem;border-radius:4px;font-size:0.85rem;font-weight:500">'+m+'</span>';
+                        }
+                    }
+                    html += '</div></div>';
+                }
+            }
+        } else {
+            html += '<p style="color:#7f8c8d;padding:1rem;background:#f8f9fa;border-radius:6px">No domain clusters</p>';
+        }
+        
+        html += '</div></div>';
+        
+        vizDiv.innerHTML = html;
+        console.log(' Rendered successfully - HTML length:', html.length);
+        
+    } catch (e) {
+        vizDiv.innerHTML = '<div style="padding:2rem;color:#e74c3c;background:#fdeaea;border-radius:8px"><strong> Error:</strong> '+e.message+'</div>';
+        console.error(' Error:', e);
+    }
+}
+
+// Tab click handler (only once)
+document.addEventListener('DOMContentLoaded', function() {
+    const semBtn = document.querySelector('.tab-btn[data-tab="semanticist"]');
+    if (semBtn) {
+        semBtn.addEventListener('click', function() {
+            console.log(' Agent 3 tab clicked');
+            
+            // Deactivate all tabs
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(s => {
+                s.classList.remove('active');
+                s.style.display = 'none';
+            });
+            
+            // Activate semanticist
+            this.classList.add('active');
+            const section = document.getElementById('semanticist');
+            if (section) {
+                section.classList.add('active');
+                section.style.display = 'block';
+            }
+            
+            // Render after short delay
+            setTimeout(renderSemanticist, 50);
+        });
+        
+        console.log(' Semanticist tab listener attached');
+    }
+});

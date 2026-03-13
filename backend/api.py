@@ -1,9 +1,10 @@
-from pathlib import Path
+﻿from pathlib import Path
 from fastapi import FastAPI, Query, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse, HTMLResponse
 from src.agents.surveyor import SurveyorAgent
 from src.agents.hydrologist import HydrologistAgent
+from src.agents.semanticist import SemanticistAgent
 import traceback
 from src.orchestrator import run_analysis
 app = FastAPI(title="Brownfield Cartographer API", version="0.1.0")
@@ -264,3 +265,25 @@ async def simple_analyze(repo_path: str = "targets/jaffle_shop"):
 
 
 
+
+# ============================================================================
+# SEMANTICIST AGENT ENDPOINTS
+# ============================================================================
+
+@app.get("/api/agent/semanticist/purposes")
+async def get_semanticist_purposes(repo_path: str = Query(default="targets/jaffle_shop")):
+    try:
+        agent = SemanticistAgent(repo_path=Path(repo_path))
+        result = agent.run()
+        return {"ok": True, "purposes": result["purpose_statements"], "count": len(result["purpose_statements"])}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+@app.get("/api/agent/semanticist/domains")
+async def get_semanticist_domains(repo_path: str = Query(default="targets/jaffle_shop")):
+    try:
+        agent = SemanticistAgent(repo_path=Path(repo_path))
+        result = agent.run()
+        return {"ok": True, "clusters": result["domain_clusters"]}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
