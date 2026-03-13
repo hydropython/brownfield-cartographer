@@ -7,13 +7,41 @@ from src.agents.hydrologist import HydrologistAgent
 from src.agents.semanticist import SemanticistAgent
 import traceback
 from src.orchestrator import run_analysis
+
+def _clone_repo(repo_url: str, target_dir: Path) -> str:
+    """
+    Clone a git repository to target_dir.
+    Returns the local repo path or raises exception.
+    """
+    import subprocess
+    
+    # Extract repo name from URL
+    repo_name = repo_url.rstrip("/").split("/")[-1].replace(".git", "")
+    local_path = target_dir / repo_name
+    
+    if local_path.exists() and (local_path / ".git").exists():
+        # Already cloned - pull latest
+        subprocess.run(["git", "-C", str(local_path), "pull"], 
+                      capture_output=True, check=True)
+        return str(local_path)
+    
+    # Clone new repo
+    subprocess.run(["git", "clone", "--depth", "1", repo_url, str(local_path)], 
+                  capture_output=True, check=True, timeout=300)
+    
+    return str(local_path)
+
 app = FastAPI(title="Brownfield Cartographer API", version="0.1.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 _cache = {}
 
 def _load_surveyor(repo_path: str = "targets/jaffle_shop"):
-    if "surveyor" not in _cache:
+    # Create safe cache key (no slashes or backslashes)
+    safe_path = repo_path.replace('/', '_').replace('\\', '_')
+    cache_key = f"surveyor_{safe_path}"
+    
+    if cache_key not in _cache:
         try:
             print("\n=== LOADING SURVEYOR AGENT ===")
             agent = SurveyorAgent(repo_path=Path(repo_path))
@@ -36,24 +64,23 @@ def _load_surveyor(repo_path: str = "targets/jaffle_shop"):
             seeds_dir = Path(repo_path) / "seeds"
             if seeds_dir.exists():
                 for seed_file in seeds_dir.glob("*.csv"):
-                    seed_name = seed_file.stem  # e.g., "raw_customers"
+                    seed_name = seed_file.stem
                     seed_id = f"seeds.{seed_name}"
                     elements.append({"data": {"id": seed_id, "label": seed_name, "type": "seed", "file": str(seed_file.relative_to(Path(repo_path)))}})
                     node_ids.add(seed_id)
                     print(f"  + Seed: {seed_id}")
             
-            # Step 3: Build external lookup (external.* -> real node)
+            # Step 3: Build external lookup
             external_map = {}
             for nid in node_ids:
                 simple = nid.split(".")[-1]
                 external_map[f"external.{simple}"] = nid
             
-            # Step 4: Add edges, resolving external refs
+            # Step 4: Add edges
             edge_count = 0
             for e in graph.edges:
                 src = e.source
                 tgt = e.target
-                # Resolve external targets
                 if tgt.startswith("external.") and tgt in external_map:
                     tgt = external_map[tgt]
                 if src.startswith("external.") and src in external_map:
@@ -63,23 +90,29 @@ def _load_surveyor(repo_path: str = "targets/jaffle_shop"):
                     edge_count += 1
                     print(f"  Edge: {src} --[{e.edge_type}]--> {tgt}")
             
-            _cache["surveyor"] = {
+            # ✅ Use cache_key instead of hardcoded "surveyor"
+            _cache[cache_key] = {
                 "nodes": len([x for x in elements if "source" not in x["data"]]),
                 "edges": edge_count,
                 "elements": elements,
                 "agent": agent,
                 "graph": graph
             }
-            print(f"\u2713 Surveyor: {_cache['surveyor']['nodes']} nodes, {_cache['surveyor']['edges']} edges\n")
+            print(f"✓ Surveyor: {_cache[cache_key]['nodes']} nodes, {_cache[cache_key]['edges']} edges\n")
         except Exception as ex:
             print(f"ERROR: {ex}")
+            import traceback
             traceback.print_exc()
-            _cache["surveyor"] = {"nodes": 0, "edges": 0, "elements": [], "agent": None, "graph": None}
+            _cache[cache_key] = {"nodes": 0, "edges": 0, "elements": [], "agent": None, "graph": None}
     
-    return _cache["surveyor"]
+    return _cache[cache_key]
 
 def _load_hydrologist(repo_path: str = "targets/jaffle_shop"):
-    if "hydrologist" not in _cache:
+    # Create safe cache key (no slashes or backslashes)
+    safe_path = repo_path.replace('/', '_').replace('\\', '_')
+    cache_key = f"hydrologist_{safe_path}"
+    
+    if cache_key not in _cache:
         try:
             print("\n=== LOADING HYDROLOGIST AGENT ===")
             agent = HydrologistAgent(repo_path=Path(repo_path))
@@ -103,7 +136,8 @@ def _load_hydrologist(repo_path: str = "targets/jaffle_shop"):
             breakdown = Counter([e.get("type","UNKNOWN") for e in edges])
             conf_scores = [e.get("confidence",1.0) for e in edges]
             
-            _cache["hydrologist"] = {
+            # ✅ Use cache_key instead of hardcoded "hydrologist"
+            _cache[cache_key] = {
                 "nodes": len(nodes),
                 "edges": len(edges),
                 "elements": elements,
@@ -114,14 +148,14 @@ def _load_hydrologist(repo_path: str = "targets/jaffle_shop"):
                 "agent": agent,
                 "graph": graph
             }
-            print(f"\u2713 Hydrologist: {_cache['hydrologist']['nodes']} nodes, {_cache['hydrologist']['edges']} edges\n")
+            print(f"✓ Hydrologist: {_cache[cache_key]['nodes']} nodes, {_cache[cache_key]['edges']} edges\n")
         except Exception as ex:
             print(f"ERROR: {ex}")
+            import traceback
             traceback.print_exc()
-            _cache["hydrologist"] = {"nodes": 0, "edges": 0, "elements": [], "edge_breakdown": [], "conf_high": 0, "conf_med": 0, "conf_low": 0, "agent": None, "graph": None}
+            _cache[cache_key] = {"nodes": 0, "edges": 0, "elements": [], "edge_breakdown": [], "conf_high": 0, "conf_med": 0, "conf_low": 0, "agent": None, "graph": None}
     
-    return _cache["hydrologist"]
-
+    return _cache[cache_key]
 @app.get("/", response_class=HTMLResponse)
 async def root():
     return FileResponse("frontend/index.html")
@@ -222,39 +256,61 @@ async def export(agent: str):
 # SIMPLE ANALYSIS API - Minimal & Working
 # ============================================
 
-@app.get("/api/analyze")
-async def simple_analyze(repo_path: str = "targets/jaffle_shop"):
+@app.post("/api/analyze")
+async def analyze_repo(data: dict):
     """
-    Simple endpoint: takes repo_path, runs orchestrator, returns results.
-    Test with: Invoke-RestMethod "http://127.0.0.1:8002/api/analyze"
+    Clone repo from URL → Run Orchestrator → Return results.
+    
+    POST /api/analyze
+    Body: {"repo_url": "https://github.com/user/repo.git"}
     """
     from pathlib import Path
     from src.orchestrator import run_analysis
     
+    repo_url = data.get("repo_url")
+    if not repo_url:
+        return {"ok": False, "error": "Missing repo_url in request body"}
+    
     try:
-        path = Path(repo_path)
-        output_dir = path / ".cartography"
+        # Step 1: Clone repo
+        targets_dir = Path("targets")
+        targets_dir.mkdir(exist_ok=True)
+        local_path = _clone_repo(repo_url, targets_dir)
         
-        # Run the orchestrator
-        result = run_analysis(repo_path=path, output_dir=output_dir, verbose=False)
+        # Step 2: Run orchestrator
+        output_dir = Path(local_path) / ".cartography"
+        result = run_analysis(
+            repo_path=Path(local_path), 
+            output_dir=output_dir, 
+            verbose=False
+        )
         
-        # Extract simple metrics
+        # Step 3: Extract metrics for frontend
         s = result.get("surveyor", {})
         h = result.get("hydrologist", {})
+        sem = result.get("semanticist", {})
         
         return {
             "ok": True,
-            "repo": repo_path,
-            "surveyor": {"nodes": s.get("nodes", 0), "edges": s.get("edges", 0)},
-            "hydrologist": {"nodes": h.get("nodes", 0), "edges": h.get("edges", 0)},
-            "total_nodes": s.get("nodes", 0) + h.get("nodes", 0),
-            "total_edges": s.get("edges", 0) + h.get("edges", 0),
+            "repo": repo_url,
+            "local_path": local_path,
+            "progress_log": result.get("progress_log", []),
+            "stats": {
+                "surveyor": {"nodes": s.get("nodes", 0), "edges": s.get("edges", 0)},
+                "hydrologist": {"nodes": h.get("nodes", 0), "edges": h.get("edges", 0)},
+                "semanticist": {"modules": sem.get("modules_analyzed", 0), "domains": sem.get("domains", 0)},
+                "total_nodes": s.get("nodes", 0) + h.get("nodes", 0),
+                "total_edges": s.get("edges", 0) + h.get("edges", 0),
+                "drift_count": sem.get("drift_count", 0)
+            },
             "artifacts": result.get("artifacts", []),
             "errors": result.get("errors", [])
         }
         
     except Exception as e:
-        return {"ok": False, "error": str(e), "repo": repo_path}
+        import traceback
+        traceback.print_exc()
+        return {"ok": False, "error": str(e), "repo": repo_url}
 
 
 
@@ -270,12 +326,18 @@ async def simple_analyze(repo_path: str = "targets/jaffle_shop"):
 # SEMANTICIST AGENT ENDPOINTS
 # ============================================================================
 
-@app.get("/api/agent/semanticist/purposes")
-async def get_semanticist_purposes(repo_path: str = Query(default="targets/jaffle_shop")):
+@app.get("/api/agent/semanticist/full")
+async def get_semanticist_full(repo_path: str = Query(default="targets/jaffle_shop")):
     try:
         agent = SemanticistAgent(repo_path=Path(repo_path))
         result = agent.run()
-        return {"ok": True, "purposes": result["purpose_statements"], "count": len(result["purpose_statements"])}
+        return {
+            "ok": True,
+            "purposes": result.get("purpose_statements", {}),
+            "domains": result.get("domain_clusters", {}),
+            "drift": result.get("drift_detection", []),
+            "repo_path": repo_path
+        }
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
@@ -308,4 +370,5 @@ async def get_semanticist_full(repo_path: str = Query(default="targets/jaffle_sh
         import traceback
         traceback.print_exc()
         return {"ok": False, "error": str(e)}
+
 
