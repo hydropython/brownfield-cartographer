@@ -370,5 +370,63 @@ async def get_semanticist_full(repo_path: str = Query(default="targets/jaffle_sh
         import traceback
         traceback.print_exc()
         return {"ok": False, "error": str(e)}
+    
+    
+@app.get("/api/agent/archivist/artifacts")
+async def get_archivist_artifacts(repo_path: str = Query(default="targets/jaffle_shop")):
+    """Get paths to all Archivist-generated artifacts."""
+    try:
+        # Normalize path
+        safe_path = repo_path.replace('\\', '/')
+        output_dir = Path(safe_path) / ".cartographer"
+        
+        artifacts = {
+            "codebase_md": None,
+            "onboarding_brief": None,
+            "lineage_graph": None,
+            "semantic_index": None,
+            "trace_log": None
+        }
+        
+        if output_dir.exists():
+            # Check each artifact
+            if (output_dir / "CODEBASE.md").exists():
+                artifacts["codebase_md"] = str(output_dir / "CODEBASE.md")
+            if (output_dir / "onboarding_brief.md").exists():
+                artifacts["onboarding_brief"] = str(output_dir / "onboarding_brief.md")
+            if (output_dir / "lineage_graph.json").exists():
+                artifacts["lineage_graph"] = str(output_dir / "lineage_graph.json")
+            if (output_dir / "semantic_index").exists():
+                artifacts["semantic_index"] = str(output_dir / "semantic_index")
+            if (output_dir / "cartography_trace.jsonl").exists():
+                artifacts["trace_log"] = str(output_dir / "cartography_trace.jsonl")
+        
+        return {
+            "ok": True,
+            "artifacts": artifacts,
+            "output_dir": str(output_dir)
+        }
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return {"ok": False, "error": str(e)}
+
+@app.get("/api/file")
+async def serve_file(path: str, download: bool = False):
+    """Serve a file from the filesystem (for viewing/downloading artifacts)."""
+    try:
+        file_path = Path(path)
+        if not file_path.exists():
+            return {"error": "File not found"}
+        
+        if download:
+            from fastapi.responses import FileResponse
+            return FileResponse(str(file_path), filename=file_path.name)
+        else:
+            # Return file content as text
+            content = file_path.read_text(encoding="utf-8")
+            return {"content": content, "filename": file_path.name}
+    except Exception as e:
+        return {"error": str(e)}
 
 

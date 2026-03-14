@@ -3,291 +3,145 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Brownfield Cartographer  Professional Dashboard</title>
+    <title>Brownfield Cartographer | Professional Dashboard</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="css/styles.css"><link rel="stylesheet" href="css/legend.css">
+    <link rel="stylesheet" href="css/styles.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.28.1/cytoscape.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script><style>
-/* HORIZONTAL NAVIGATION - Scalable for many agents */
-nav.agent-tabs {
-    display: flex;
-    flex-direction: row !important;
-    gap: 0.25rem;
-    padding: 0.5rem 1rem;
-    background: #f8f9fa;
-    border-bottom: 2px solid #e0e0e0;
-    overflow-x: auto;
-}
+    <style>
+        :root { --primary: #1a1a2e; --accent: #3498db; --success: #27ae60; --dark: #1e1e1e; }
+        body { font-family: 'Inter', sans-serif; margin: 0; background: #f4f7f6; color: #333; }
+        
+        /* Navigation Overlay */
+        nav.agent-tabs { display: flex; background: var(--primary); padding: 0 1rem; gap: 5px; overflow-x: auto; }
+        .tab-btn { 
+            background: transparent; border: none; color: #aeb1b7; padding: 1rem 1.5rem; 
+            cursor: pointer; font-weight: 500; border-bottom: 3px solid transparent; transition: 0.3s; white-space: nowrap;
+        }
+        .tab-btn.active { color: white; border-bottom-color: var(--accent); background: rgba(255,255,255,0.05); }
+        
+        /* Dashboard Layout */
+        .tab-content { display: none; animation: fadeIn 0.4s; }
+        .tab-content.active { display: block; }
+        .viz-wrapper { display: flex; height: calc(100vh - 200px); background: white; margin: 1rem; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
+        .graph-area { flex-grow: 1; position: relative; background: #fff; }
+        
+        /* The Node Inspector - High Maturity Flexbox */
+        .inspector-panel { 
+            width: 350px; background: #fafafa; border-left: 1px solid #e0e0e0; 
+            display: none; overflow-y: auto; padding: 20px; font-size: 0.9rem;
+        }
 
-nav.agent-tabs .tab-btn {
-    padding: 0.6rem 1rem;
-    border-radius: 6px 6px 0 0;
-    white-space: nowrap;
-    transition: all 0.2s;
-}
+        /* Stats & Logs */
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; padding: 1rem; }
+        .stat-card { background: white; padding: 1.2rem; border-radius: 8px; text-align: center; border: 1px solid #eee; }
+        .terminal-log { background: var(--dark); color: #00ff00; font-family: 'Consolas', monospace; padding: 15px; border-radius: 6px; height: 180px; overflow-y: auto; margin: 1rem; font-size: 0.8rem; border: 1px solid #333; }
 
-nav.agent-tabs .tab-btn:hover {
-    background: #e8eaed;
-}
-
-nav.agent-tabs .tab-btn.active {
-    background: #1a1a2e;
-    color: white;
-    border-bottom: 3px solid #3498db;
-}
-
-/* Hide vertical nav on desktop (keep for mobile if needed) */
-@media (min-width: 768px) {
-    .vertical-nav { display: none !important; }
-}
-
-/* Adjust main content padding */
-main.dashboard {
-    padding: 0;
-}
-</style><style>
-/* Ensure all tab contents display correctly */
-.tab-content { display: none; }
-.tab-content.active { display: block !important; }
-</style>
-    </head>
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
 <body>
-    <header class="academic-header">
-        <div class="header-content">
-            <div class="logo"><i class="fas fa-project-diagram"></i><h1>Brownfield Cartographer</h1></div>
-            <div class="metadata"><span class="badge">v0.1.0</span><span class="repo">jaffle_shop</span><span class="timestamp" id="timestamp">-</span></div>
+
+    <header style="background: white; padding: 1rem 2rem; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee;">
+        <div style="display: flex; align-items: center; gap: 15px;">
+            <i class="fas fa-project-diagram" style="color: var(--accent); font-size: 1.5rem;"></i>
+            <h1 style="margin: 0; font-size: 1.25rem; color: var(--primary);">Brownfield Cartographer <span style="font-weight: normal; color: #888; font-size: 0.8rem;">v0.1.0</span></h1>
         </div>
+        <div id="repo-badge" style="background: #eef2f7; padding: 5px 12px; border-radius: 20px; font-size: 0.8rem; color: #555;">No Repo Loaded</div>
     </header>
 
     <nav class="agent-tabs">
-        <button class="tab-btn active" data-tab="overview"><i class="fas fa-home"></i> Overview</button>
-        <button class="tab-btn" data-tab="surveyor"><i class="fas fa-sitemap"></i> Agent 1: Surveyor</button>
-        <button class="tab-btn" data-tab="hydrologist"><i class="fas fa-water"></i> Agent 2: Hydrologist</button>
+        <button class="tab-btn active" data-tab="overview"><i class="fas fa-terminal"></i> Command</button>
+        <button class="tab-btn" data-tab="surveyor"><i class="fas fa-sitemap"></i> A1: Surveyor</button>
+        <button class="tab-btn" data-tab="hydrologist"><i class="fas fa-water"></i> A2: Hydrologist</button>
+        <button class="tab-btn" data-tab="semanticist"><i class="fas fa-brain"></i> A3: Semanticist</button>
+        <button class="tab-btn" data-tab="archivist"><i class="fas fa-box-archive"></i> A4: Archivist</button>
         <button class="tab-btn" data-tab="methodology"><i class="fas fa-book"></i> Methodology</button>
-        <button class="tab-btn" data-tab="semanticist" >
-            <i class="fas fa-brain"></i> Agent 3: Semanticist
-        </button>
     </nav>
 
-    <main class="dashboard">
-        <!-- Overview Tab -->
-                <!-- Overview Tab - Reorganized -->
-                <!-- Overview Tab - Clean & Professional -->
-        <section id="overview" class="tab-content active">
-            <div class="agent-header" style="text-align: center; padding: 2rem 0;">
-                <h2 style="font-size: 2rem; color: #1a1a2e; margin-bottom: 0.5rem;"><i class="fas fa-home"></i> Brownfield Cartographer</h2>
-                <p style="color: #666; font-size: 1.1rem;">AI-powered codebase analysis for brownfield projects</p>
-            </div>
-            
-            <!-- 1. REPO INPUT - Compact & Clean -->
-            <div style="max-width: 700px; margin: 2rem auto; padding: 0;">
-                <div style="display: flex; gap: 0.75rem; box-shadow: 0 2px 12px rgba(0,0,0,0.1); border-radius: 8px; overflow: hidden; border: 1px solid #e0e0e0;">
-                    <input type="text" id="repo-url-input" placeholder="https://github.com/username/repo.git" 
-                           style="flex: 1; padding: 0.875rem 1.25rem; border: none; font-size: 0.95rem; outline: none; background: #fafafa;">
-                    <button id="analyze-btn" 
-                            style="padding: 0.875rem 1.75rem; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; font-size: 0.95rem; cursor: pointer; font-weight: 600; white-space: nowrap;">
-                        Analyze
-                    </button>
-                </div>
-                <p style="text-align: center; color: #888; font-size: 0.85rem; margin-top: 0.75rem;">
-                     Try: <code style="background: #f0f0f0; padding: 0.2rem 0.5rem; border-radius: 3px; cursor: pointer;" onclick="document.getElementById('repo-url-input').value='https://github.com/dbt-labs/jaffle_shop.git'">dbt-labs/jaffle_shop</code>
-                </p>
-                <div id="repo-status" style="margin-top: 1rem; padding: 0.75rem 1rem; border-radius: 6px; font-size: 0.9rem; display: none;"></div>
-            </div>
-            
-            <!-- 2. ANALYSIS LOGS - Terminal Style -->
-            <div id="analysis-logs-section" style="max-width: 900px; margin: 2rem auto; display: none;">
-                <h4 style="color: #1a1a2e; margin-bottom: 0.75rem; font-size: 1rem;"><i class="fas fa-terminal"></i> Analysis Progress</h4>
-                <div id="analysis-logs" style="background: #1e1e1e; color: #00ff00; padding: 1rem; border-radius: 6px; font-family: 'Consolas', monospace; font-size: 0.8rem; max-height: 200px; overflow-y: auto; border: 1px solid #333;"></div>
-            </div>
-            
-            <!-- 3. AGENT RESULTS - Clean Cards -->
-            <div id="agent-results-section" style="max-width: 1100px; margin: 2rem auto; display: none;">
-                <h3 style="color: #1a1a2e; margin-bottom: 1.5rem; font-size: 1.2rem; text-align: center;"><i class="fas fa-chart-line"></i> Analysis Complete</h3>
+<main id="main-dashboard">
+    <section id="overview" class="tab-content active">
+        <div style="max-width: 900px; margin: 2rem auto;">
+            <div style="background: white; padding: 2rem; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.05);">
+                <h2 style="margin-top: 0; color: var(--primary);">Forensic Swarm Execution</h2>
                 
-                <!-- Stats Row -->
-                <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 2rem;">
-                    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 1.25rem; border-radius: 8px; text-align: center;">
-                        <div style="font-size: 1.75rem; font-weight: bold;" id="stat-nodes">0</div>
-                        <div style="font-size: 0.85rem; opacity: 0.9;">Nodes</div>
+                <div style="display: flex; gap: 10px; margin-bottom: 2rem;">
+                    <input type="text" id="repo-url-input" placeholder="Repository Path or URL" style="flex: 1; padding: 12px; border: 1px solid #ddd; border-radius: 6px;">
+                    <button id="analyze-btn" style="background: var(--accent); color: white; border: none; padding: 0 25px; border-radius: 6px; cursor: pointer; font-weight: 600;">Run Swarm</button>
+                </div>
+
+                <div class="stats-grid">
+                    <div class="stat-card" style="border-top: 4px solid var(--accent);">
+                        <h3 id="stat-duration" style="margin:0;">0.00s</h3>
+                        <p style="margin:5px 0 0; font-size:0.7rem; color:#888; text-transform:uppercase;">Runtime</p>
                     </div>
-                    <div style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: white; padding: 1.25rem; border-radius: 8px; text-align: center;">
-                        <div style="font-size: 1.75rem; font-weight: bold;" id="stat-edges">0</div>
-                        <div style="font-size: 0.85rem; opacity: 0.9;">Edges</div>
+                    <div class="stat-card">
+                        <h3 id="stat-nodes" style="margin:0;">0</h3>
+                        <p style="margin:5px 0 0; font-size:0.7rem; color:#888; text-transform:uppercase;">Nodes</p>
                     </div>
-                    <div style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); color: white; padding: 1.25rem; border-radius: 8px; text-align: center;">
-                        <div style="font-size: 1.75rem; font-weight: bold;" id="stat-modules">0</div>
-                        <div style="font-size: 0.85rem; opacity: 0.9;">Modules</div>
+                    <div class="stat-card">
+                        <h3 id="stat-edges" style="margin:0;">0</h3>
+                        <p style="margin:5px 0 0; font-size:0.7rem; color:#888; text-transform:uppercase;">Edges</p>
                     </div>
-                    <div style="background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%); color: white; padding: 1.25rem; border-radius: 8px; text-align: center;">
-                        <div style="font-size: 1.75rem; font-weight: bold;" id="stat-drift">0</div>
-                        <div style="font-size: 0.85rem; opacity: 0.9;">Drift</div>
+                    <div class="stat-card">
+                        <h3 id="stat-drift" style="margin:0;">0</h3>
+                        <p style="margin:5px 0 0; font-size:0.7rem; color:#888; text-transform:uppercase;">Drift</p>
                     </div>
                 </div>
-                
-                <!-- Agent Cards -->
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.25rem;">
-                    <!-- Agent 1 -->
-                    <div class="card" style="border-left: 4px solid #3498db; padding: 1.25rem; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
-                        <h4 style="color: #3498db; margin: 0 0 0.5rem 0; font-size: 1rem;"><i class="fas fa-sitemap"></i> Surveyor</h4>
-                        <p style="color: #888; font-size: 0.8rem; margin: 0 0 1rem 0;">Module dependencies & architecture</p>
-                        <div style="font-size: 0.9rem; color: #333;">
-                            <div><strong>Nodes:</strong> <span id="a1-nodes">-</span></div>
-                            <div><strong>Edges:</strong> <span id="a1-edges">-</span></div>
-                        </div>
-                        <button onclick="document.querySelector('[data-tab='surveyor']').click()" 
-                                style="margin-top: 1rem; width: 100%; padding: 0.5rem; background: #3498db; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.85rem;">
-                            View Details
-                        </button>
-                    </div>
-                    
-                    <!-- Agent 2 -->
-                    <div class="card" style="border-left: 4px solid #9b59b6; padding: 1.25rem; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
-                        <h4 style="color: #9b59b6; margin: 0 0 0.5rem 0; font-size: 1rem;"><i class="fas fa-water"></i> Hydrologist</h4>
-                        <p style="color: #888; font-size: 0.8rem; margin: 0 0 1rem 0;">Data lineage & SQL flow</p>
-                        <div style="font-size: 0.9rem; color: #333;">
-                            <div><strong>Nodes:</strong> <span id="a2-nodes">-</span></div>
-                            <div><strong>Edges:</strong> <span id="a2-edges">-</span></div>
-                        </div>
-                        <button onclick="document.querySelector('[data-tab='hydrologist']').click()" 
-                                style="margin-top: 1rem; width: 100%; padding: 0.5rem; background: #9b59b6; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.85rem;">
-                            View Details
-                        </button>
-                    </div>
-                    
-                    <!-- Agent 3 -->
-                    <div class="card" style="border-left: 4px solid #e74c3c; padding: 1.25rem; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
-                        <h4 style="color: #e74c3c; margin: 0 0 0.5rem 0; font-size: 1rem;"><i class="fas fa-brain"></i> Semanticist</h4>
-                        <p style="color: #888; font-size: 0.8rem; margin: 0 0 1rem 0;">LLM purpose analysis</p>
-                        <div style="font-size: 0.9rem; color: #333;">
-                            <div><strong>Modules:</strong> <span id="a3-modules">-</span></div>
-                            <div><strong>Drift:</strong> <span id="a3-drift">-</span></div>
-                        </div>
-                        <button onclick="document.querySelector('[data-tab='semanticist']').click()" 
-                                style="margin-top: 1rem; width: 100%; padding: 0.5rem; background: #e74c3c; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.85rem;">
-                            View Details
-                        </button>
-                    </div>
-                    
-                    <!-- Agent 4 -->
-                    <div class="card" style="border-left: 4px solid #f39c12; padding: 1.25rem; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
-                        <h4 style="color: #f39c12; margin: 0 0 0.5rem 0; font-size: 1rem;"><i class="fas fa-archive"></i> Archivist</h4>
-                        <p style="color: #888; font-size: 0.8rem; margin: 0 0 1rem 0;">Artifact extraction</p>
-                        <div style="font-size: 0.9rem; color: #333;">
-                            <div><strong>Artifacts:</strong> <span id="a4-artifacts">-</span></div>
-                            <div><strong>Patterns:</strong> <span id="a4-patterns">-</span></div>
-                        </div>
-                        <button onclick="document.querySelector('[data-tab='archivist']').click()" 
-                                style="margin-top: 1rem; width: 100%; padding: 0.5rem; background: #f39c12; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.85rem;">
-                            View Details
-                        </button>
-                    </div>
+
+                <div class="terminal-log" id="analysis-logs">
+                    > System standby...
                 </div>
             </div>
-        </section>
-
-        <!-- Surveyor Tab -->
-        <section id="surveyor" class="tab-content">
-            <div class="agent-header"><h2>Agent 1: Surveyor  Static Structure Analysis</h2><p>Extracts module dependencies, imports, exports, and architectural hubs.</p></div>
-            <div class="viz-container">
-                <div class="viz-header">
-                    <div class="viz-title"><i class="fas fa-project-diagram"></i> Module Dependency Graph</div>
-                    <div class="viz-controls">
-                        <button class="btn-small" onclick="resetViz('surveyor')"><i class="fas fa-expand"></i> Reset View</button>
-                    </div>
-                </div>
-                <div id="surveyor-viz" class="graph-viz"></div>
-                <div id="surveyor-legend" class="color-legend"></div>
-            </div>
-            <div class="stats-panel"><h3>Statistics</h3><div class="stats-grid"><div class="stat-item"><label>Architectural Hubs</label><ul id="s-hubs" class="hub-list"></ul></div><div class="stat-item"><label>Edge Types</label><canvas id="s-chart" width="200" height="200"></canvas></div></div></div>
-        </section>
-
-        <!-- Hydrologist Tab -->
-        <section id="hydrologist" class="tab-content">
-            <div class="agent-header"><h2>Agent 2: Hydrologist  Data Lineage Analysis</h2><p>Extracts data dependencies from SQL, YAML, and dbt patterns with confidence scoring.</p></div>
-            <div class="viz-container">
-                <div class="viz-header">
-                    <div class="viz-title"><i class="fas fa-water"></i> Data Lineage Graph</div>
-                    <div class="viz-controls">
-                        <button class="btn-small" onclick="resetViz('hydrologist')"><i class="fas fa-expand"></i> Reset View</button>
-                        <button class="btn-small" onclick="filterHighConf()"><i class="fas fa-filter"></i> High Confidence Only</button>
-                    </div>
-                </div>
-                <div id="hydrologist-viz" class="graph-viz"></div>
-                <div id="hydrologist-legend" class="color-legend"></div>
-            </div>
-            <div class="stats-panel"><h3>Lineage Statistics</h3><div class="stats-grid"><div class="stat-item"><label>Edge Breakdown</label><canvas id="h-edge-chart" width="200" height="200"></canvas></div><div class="stat-item"><label>Confidence</label><canvas id="h-conf-chart" width="200" height="200"></canvas></div><div class="stat-item"><label>Blast Radius</label><div class="blast-info"><select id="blast-target" onchange="updateBlast()"><option value="raw_customers">raw_customers</option><option value="raw_orders">raw_orders</option><option value="raw_payments">raw_payments</option></select><div id="blast-result">Loading...</div></div></div></div></div>
-        </section>
-
-        <!-- Methodology Tab -->
-        <section id="methodology" class="tab-content">
-            <div class="methodology-content">
-                <h2>Methodology & Technical Details</h2>
-                <article class="method-section">
-                    <h3><i class="fas fa-microscope"></i> Edge Extraction Methods</h3>
-                    <table class="method-table">
-                        <thead><tr><th>Edge Type</th><th>Method</th><th>Confidence</th><th>Evidence</th></tr></thead>
-                        <tbody>
-                            <tr><td><code>DBT_REF</code></td><td>Regex: <code>{{ ref() }}</code></td><td><span class="badge high">1.0</span></td><td>Explicit dbt syntax</td></tr>
-                            <tr><td><code>DEPENDS_ON</code></td><td>SQLGlot AST parsing</td><td><span class="badge medium">0.8</span></td><td>FROM/JOIN/CTE</td></tr>
-                            <tr><td><code>RELATIONSHIP</code></td><td>YAML schema.yml</td><td><span class="badge high">1.0</span></td><td>Foreign key tests</td></tr>
-                            <tr><td><code>TESTS</code></td><td>YAML schema.yml</td><td><span class="badge high">1.0</span></td><td>not_null, unique</td></tr>
-                        </tbody>
-                    </table>
-                </article>
-                <article class="method-section">
-                    <h3><i class="fas fa-shield-alt"></i> Confidence Framework</h3>
-                    <ul class="confidence-legend">
-                        <li><span class="badge high">High (0.9)</span>: Explicit syntax (dbt refs, YAML)</li>
-                        <li><span class="badge medium">Medium (0.6-0.9)</span>: Parsed SQL patterns</li>
-                        <li><span class="badge low">&lt;0.6</span>: Heuristic fallback (unused)</li>
-                    </ul>
-                </article>
-                <article class="method-section">
-                    <h3><i class="fas fa-book"></i> References</h3>
-                    <ol class="references">
-                        <li>Brin & Page (1998). PageRank. <em>Computer Networks</em>.</li>
-                        <li>Nielson et al. (2015). <em>Principles of Program Analysis</em>. Springer.</li>
-                        <li>dbt Labs. (2024). <em>dbt Core Documentation</em>.</li>
-                    </ol>
-                </article>
-            </div>
-        </section><!-- Agent 3: Semanticist Tab -->
-        <section id="semanticist" class="tab-content">
-            <div class="agent-header">
-                <h2><i class="fas fa-brain"></i> Agent 3: Semanticist - LLM-Powered Purpose Analysis</h2>
-                <p>Generates purpose statements and identifies domain clusters using LLM analysis</p>
-            </div>
-            <div class="viz-container">
-                <div id="semanticist-viz" style="display:none;border:1px solid #e0e0e0;border-radius:8px"></div>
-            </div>
-            <div class="purpose-list" style="margin-top:2rem">
-                <h3>Purpose Statements</h3>
-                <div id="purpose-list-content" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1rem"></div>
-            </div>
-        </section>
-    </main>
-
-    <footer class="academic-footer">
-        <div class="footer-content">
-            <p><strong>Brownfield Cartographer</strong> v0.1.0  Research prototype for automated codebase intelligence.</p>
-            <p class="citation">Cite: <code>Cartographer v0.1.0 [Software]. (2026). https://github.com/your-org/brownfield-cartographer</code></p>
         </div>
-    </footer>
+    </section>
+
+    <section id="surveyor" class="tab-content">
+        <div class="viz-wrapper" style="display: flex; height: calc(100vh - 200px); background: #fff; margin: 1rem; border-radius: 8px; border: 1px solid #e0e0e0; overflow: hidden;">
+            <div id="surveyor-viz" style="flex-grow: 1; position: relative;"></div>
+            
+            <div id="surveyor-inspector" class="inspector-panel" style="width: 350px; background: #fafafa; border-left: 1px solid #ddd; display: none; overflow-y: auto; padding: 20px;">
+                <div id="surveyor-inspector-content">
+                    <p style="color: #888;">Select a node to view forensic details.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="hydrologist" class="tab-content">
+        <div class="viz-wrapper" style="display: flex; height: calc(100vh - 200px); background: #fff; margin: 1rem; border-radius: 8px; border: 1px solid #e0e0e0; overflow: hidden;">
+            <div id="hydrologist-viz" style="flex-grow: 1; position: relative;"></div>
+            
+            <div id="hydrologist-inspector" class="inspector-panel" style="width: 350px; background: #fafafa; border-left: 1px solid #ddd; display: none; overflow-y: auto; padding: 20px;">
+                <div id="hydrologist-inspector-content">
+                    <p style="color: #888;">Select a node to view lineage metadata.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="semanticist" class="tab-content" style="padding: 2rem;">
+        <div id="purpose-list-content" style="display: grid; gap: 1rem; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));"></div>
+    </section>
+
+    <section id="archivist" class="tab-content" style="padding: 2rem;">
+        <div id="archivist-artifacts" style="display: grid; gap: 2rem; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));"></div>
+    </section>
+
+    <section id="methodology" class="tab-content" style="padding: 3rem; max-width: 1000px; margin: auto;">
+        <div style="background: white; padding: 2rem; border-radius: 8px; border: 1px solid #eee;">
+            <h2>Methodology & Forensic Anchors</h2>
+            <hr>
+            <h4>Edge Extraction Strategy</h4>
+            <p>We prioritize <strong>Deterministic Syntax Parsing</strong> over probabilistic LLM guesses.</p>
+            <ul style="line-height: 1.8;">
+                <li><code>DBT_REF</code>: Extracted via Regex from Jinja templates.</li>
+                <li><code>SQL_LINEAGE</code>: Processed using SQLGlot AST transformations.</li>
+                <li><code>DRIFT</code>: Detected by comparing Semanticist's purpose extraction against Git commit history.</li>
+            </ul>
+        </div>
+    </section>
+</main>
 
     <script src="js/app.js"></script>
-        
-    </body>
+</body>
 </html>
-
-
-
-
-
-
-
-
-
-
-
-
