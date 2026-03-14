@@ -1,0 +1,275 @@
+{
+  "status": "success",
+  "nodes": [
+    {
+      "id": "DBT_PROJECT",
+      "type": "FileNode",
+      "color": "#95a5a6",
+      "source_file": "dbt_project.yml",
+      "label": "dbt_project"
+    },
+    {
+      "id": "PACKAGE-LOCK",
+      "type": "FileNode",
+      "color": "#95a5a6",
+      "source_file": "package-lock.yml",
+      "label": "package-lock"
+    },
+    {
+      "id": "PACKAGES",
+      "type": "FileNode",
+      "color": "#95a5a6",
+      "source_file": "packages.yml",
+      "label": "packages"
+    },
+    {
+      "id": "TASKFILE",
+      "type": "FileNode",
+      "color": "#95a5a6",
+      "source_file": "Taskfile.yml",
+      "label": "Taskfile"
+    },
+    {
+      "id": "CD_PROD",
+      "type": "FileNode",
+      "color": "#95a5a6",
+      "source_file": ".github\\workflows\\cd_prod.yml",
+      "label": "cd_prod"
+    },
+    {
+      "id": "CD_STAGING",
+      "type": "FileNode",
+      "color": "#95a5a6",
+      "source_file": ".github\\workflows\\cd_staging.yml",
+      "label": "cd_staging"
+    },
+    {
+      "id": "CI",
+      "type": "FileNode",
+      "color": "#95a5a6",
+      "source_file": ".github\\workflows\\ci.yml",
+      "label": "ci"
+    },
+    {
+      "id": "DBT_CLOUD_RUN_JOB",
+      "type": "FileNode",
+      "color": "#95a5a6",
+      "source_file": ".github\\workflows\\scripts\\dbt_cloud_run_job.py",
+      "label": "dbt_cloud_run_job"
+    },
+    {
+      "id": "CENTS_TO_DOLLARS",
+      "type": "FileNode",
+      "color": "#2ecc71",
+      "source_file": "macros\\cents_to_dollars.sql",
+      "label": "cents_to_dollars"
+    },
+    {
+      "id": "GENERATE_SCHEMA_NAME",
+      "type": "FileNode",
+      "color": "#2ecc71",
+      "source_file": "macros\\generate_schema_name.sql",
+      "label": "generate_schema_name"
+    },
+    {
+      "id": "CUSTOMERS",
+      "type": "FileNode",
+      "color": "#95a5a6",
+      "source_file": "models\\marts\\customers.yml",
+      "label": "customers"
+    },
+    {
+      "id": "LOCATIONS",
+      "type": "FileNode",
+      "color": "#95a5a6",
+      "source_file": "models\\marts\\locations.yml",
+      "label": "locations"
+    },
+    {
+      "id": "METRICFLOW_TIME_SPINE",
+      "type": "FileNode",
+      "color": "#2ecc71",
+      "source_file": "models\\marts\\metricflow_time_spine.sql",
+      "label": "metricflow_time_spine"
+    },
+    {
+      "id": "ORDERS",
+      "type": "FileNode",
+      "color": "#95a5a6",
+      "source_file": "models\\marts\\orders.yml",
+      "label": "orders"
+    },
+    {
+      "id": "ORDER_ITEMS",
+      "type": "FileNode",
+      "color": "#95a5a6",
+      "source_file": "models\\marts\\order_items.yml",
+      "label": "order_items"
+    },
+    {
+      "id": "PRODUCTS",
+      "type": "FileNode",
+      "color": "#95a5a6",
+      "source_file": "models\\marts\\products.yml",
+      "label": "products"
+    },
+    {
+      "id": "SUPPLIES",
+      "type": "FileNode",
+      "color": "#95a5a6",
+      "source_file": "models\\marts\\supplies.yml",
+      "label": "supplies"
+    },
+    {
+      "id": "STG_CUSTOMERS",
+      "type": "FileNode",
+      "color": "#95a5a6",
+      "source_file": "models\\staging\\stg_customers.yml",
+      "label": "stg_customers"
+    },
+    {
+      "id": "STG_LOCATIONS",
+      "type": "FileNode",
+      "color": "#95a5a6",
+      "source_file": "models\\staging\\stg_locations.yml",
+      "label": "stg_locations"
+    },
+    {
+      "id": "STG_ORDERS",
+      "type": "FileNode",
+      "color": "#95a5a6",
+      "source_file": "models\\staging\\stg_orders.yml",
+      "label": "stg_orders"
+    },
+    {
+      "id": "STG_ORDER_ITEMS",
+      "type": "FileNode",
+      "color": "#95a5a6",
+      "source_file": "models\\staging\\stg_order_items.yml",
+      "label": "stg_order_items"
+    },
+    {
+      "id": "STG_PRODUCTS",
+      "type": "FileNode",
+      "color": "#95a5a6",
+      "source_file": "models\\staging\\stg_products.yml",
+      "label": "stg_products"
+    },
+    {
+      "id": "STG_SUPPLIES",
+      "type": "FileNode",
+      "color": "#95a5a6",
+      "source_file": "models\\staging\\stg_supplies.yml",
+      "label": "stg_supplies"
+    },
+    {
+      "id": "__SOURCES",
+      "type": "FileNode",
+      "color": "#95a5a6",
+      "source_file": "models\\staging\\__sources.yml",
+      "label": "__sources"
+    }
+  ],
+  "edges": [
+    {
+      "source": "ORDERS",
+      "target": "CUSTOMERS",
+      "transformation_type": "LINEAGE",
+      "color": "#3498db",
+      "weight": 1.0
+    },
+    {
+      "source": "ORDERS",
+      "target": "ORDER_ITEMS",
+      "transformation_type": "LINEAGE",
+      "color": "#3498db",
+      "weight": 1.0
+    },
+    {
+      "source": "ORDER_ITEMS",
+      "target": "ORDERS",
+      "transformation_type": "LINEAGE",
+      "color": "#3498db",
+      "weight": 1.0
+    },
+    {
+      "source": "PRODUCTS",
+      "target": "ORDER_ITEMS",
+      "transformation_type": "LINEAGE",
+      "color": "#3498db",
+      "weight": 1.0
+    },
+    {
+      "source": "SUPPLIES",
+      "target": "ORDER_ITEMS",
+      "transformation_type": "LINEAGE",
+      "color": "#3498db",
+      "weight": 1.0
+    },
+    {
+      "source": "STG_CUSTOMERS",
+      "target": "CUSTOMERS",
+      "transformation_type": "LINEAGE",
+      "color": "#3498db",
+      "weight": 1.0
+    },
+    {
+      "source": "STG_LOCATIONS",
+      "target": "LOCATIONS",
+      "transformation_type": "LINEAGE",
+      "color": "#3498db",
+      "weight": 1.0
+    },
+    {
+      "source": "STG_ORDERS",
+      "target": "ORDERS",
+      "transformation_type": "LINEAGE",
+      "color": "#3498db",
+      "weight": 1.0
+    },
+    {
+      "source": "STG_ORDERS",
+      "target": "ORDER_ITEMS",
+      "transformation_type": "LINEAGE",
+      "color": "#3498db",
+      "weight": 1.0
+    },
+    {
+      "source": "STG_ORDER_ITEMS",
+      "target": "ORDER_ITEMS",
+      "transformation_type": "LINEAGE",
+      "color": "#3498db",
+      "weight": 1.0
+    },
+    {
+      "source": "STG_PRODUCTS",
+      "target": "ORDER_ITEMS",
+      "transformation_type": "LINEAGE",
+      "color": "#3498db",
+      "weight": 1.0
+    },
+    {
+      "source": "STG_PRODUCTS",
+      "target": "PRODUCTS",
+      "transformation_type": "LINEAGE",
+      "color": "#3498db",
+      "weight": 1.0
+    },
+    {
+      "source": "STG_SUPPLIES",
+      "target": "ORDER_ITEMS",
+      "transformation_type": "LINEAGE",
+      "color": "#3498db",
+      "weight": 1.0
+    },
+    {
+      "source": "STG_SUPPLIES",
+      "target": "SUPPLIES",
+      "transformation_type": "LINEAGE",
+      "color": "#3498db",
+      "weight": 1.0
+    }
+  ],
+  "edge_count": 14,
+  "node_count": 24
+}

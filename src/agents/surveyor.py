@@ -101,67 +101,84 @@ class SurveyorAgent:
         return results
     
     def analyze_module(self, file_path: Path) -> Optional[ModuleNode]:
+        """
+        Analyzes a single file using Tree-Sitter with regex fallbacks for Jinja/SQL.
+        """
         language_name = self._get_language(file_path)
         if not language_name:
             return None
+            
         parser = self._get_parser_for_file(file_path)
         if not parser:
             return None
+            
         try:
             content = file_path.read_text(encoding="utf-8", errors="replace")
             tree = parser.parse(bytes(content, "utf-8"))
             root_node = tree.root_node
             lang = self._languages[file_path.suffix.lower()]
             
-            # Extract imports via tree-sitter query
+            # 1. Extraction: Imports
             import_query_text = self._load_query(language_name, "imports")
             imports = self._extract_captures(import_query_text, lang, root_node, content, "import_path")
             
-            # Regex fallback for SQL files with dbt Jinja
-            if language_name == "sql":
+            # 2. Extraction: Public API/Symbols
+            api_query_text = self._load_query(language_name, "public_api")
+            exports = self._extract_captures(api_query_text, lang, root_node, content, "name")
+            
+            # 3. DBT-SPECIFIC FALLBACK: If SQL parser failed or returned empty
+            # Tree-sitter-sql often fails on Jinja {{ ref() }}
+            if language_name == "sql" or root_node.child_count == 0:
+                # Extract dbt refs
                 for match in re.finditer(r'\{\{\s*ref\s*\(\s*[\'"]([^\'"]+)[\'"]\s*\)\s*\}\}', content):
                     ref_name = match.group(1)
                     if ref_name not in imports:
                         imports.append(ref_name)
+                
+                # Extract dbt sources
                 for match in re.finditer(r'\{\{\s*source\s*\(\s*[\'"]([^\'"]+)[\'"]\s*,\s*[\'"]([^\'"]+)[\'"]\s*\)\s*\}\}', content):
-                    source_name = match.group(1) + "." + match.group(2)
+                    source_name = f"{match.group(1)}.{match.group(2)}"
                     if source_name not in imports:
                         imports.append(source_name)
+
+            # 4. Resolve paths for internal imports
+            resolved_imports = []
+            for imp in imports:
+                resolved = self._resolve_import_path(imp, file_path, self.repo_path)
+                if resolved:
+                    resolved_imports.append(resolved)
             
-            imports = [self._resolve_import_path(imp, file_path, self.repo_path) for imp in imports if self._resolve_import_path(imp, file_path, self.repo_path)]
-            
-            # Extract public API
-            api_query_text = self._load_query(language_name, "public_api")
-            exports = self._extract_captures(api_query_text, lang, root_node, content, "name")
-            
-            # Extract class inheritance
-            class_query_text = self._load_query(language_name, "classes")
-            class_captures = self._extract_captures(class_query_text, lang, root_node, content, "class_name")
-            exports.extend([c for c in class_captures if c not in exports])
-            
-            # Compute structural metrics
+            # 5. Metadata and Metrics
             rel_path = file_path.relative_to(self.repo_path)
-            change_velocity = self.git_analyzer.get_change_velocity(str(rel_path))
-            last_modified = self.git_analyzer.get_file_last_modified(str(rel_path))
-            decision_keywords = {"if", "for", "while", "elif", "except", "case", "match"}
-            complexity = sum(1 for line in content.split("\n") if any(kw in line for kw in decision_keywords))
             lines = [l.strip() for l in content.split("\n") if l.strip()]
             comment_lines = sum(1 for l in lines if l.startswith(("#", "--", "//")))
-            comment_ratio = round(comment_lines / len(lines), 3) if lines else 0.0
             
+            # Complexity calculation
+            decision_keywords = {"if", "for", "while", "elif", "except", "case", "match"}
+            complexity = sum(1 for line in content.split("\n") if any(kw in line for kw in decision_keywords))
+
             return ModuleNode(
                 id=str(rel_path.with_suffix("")).replace("/", ".").replace("\\", "."),
-                symbol_type="Module", file_path=str(rel_path), language=language_name,
-                imports=imports, exports=exports, cyclomatic_complexity=complexity,
-                comment_to_code_ratio=comment_ratio, lines_of_code=len(lines),
-                git_sha=self._get_current_commit(), last_analyzed_commit=self._get_current_commit(),
-                change_velocity_30d=change_velocity, last_modified=last_modified,
-                confidence_score=EVIDENCE_TO_CONFIDENCE["static"], evidence_type="static",
-                scope="module", query_files=[f"{language_name}/imports.scm", f"{language_name}/public_api.scm", f"{language_name}/classes.scm"]
+                symbol_type="Module",
+                file_path=str(rel_path),
+                language=language_name,
+                imports=resolved_imports,
+                exports=exports,
+                cyclomatic_complexity=complexity,
+                comment_to_code_ratio=round(comment_lines / len(lines), 3) if lines else 0.0,
+                lines_of_code=len(lines),
+                git_sha=self._get_current_commit(),
+                last_analyzed_commit=self._get_current_commit(),
+                change_velocity_30d=self.git_analyzer.get_change_velocity(str(rel_path)),
+                last_modified=self.git_analyzer.get_file_last_modified(str(rel_path)),
+                confidence_score=EVIDENCE_TO_CONFIDENCE["static"],
+                evidence_type="static",
+                scope="module"
             )
+
         except Exception as e:
             rel_path = file_path.relative_to(self.repo_path) if file_path.is_relative_to(self.repo_path) else file_path
-            self.graph.parse_warnings.append(f"Failed to parse {rel_path}: {type(e).__name__}: {str(e)[:100]}")
+            self.graph.parse_warnings.append(f"Failed to parse {rel_path}: {str(e)}")
             self.graph.files_skipped.append(str(rel_path))
             return None
     
@@ -217,13 +234,23 @@ class SurveyorAgent:
     
     def run(self, include_tests: bool = False) -> CartographyGraph:
         files_to_analyze = []
+        # DEBUG: Check if the path even exists
+        if not self.repo_path.exists():
+            print(f"CRITICAL: Repo path does not exist: {self.repo_path}")
+            return self.graph
+
         for ext in LANGUAGE_ROUTER.keys():
-            for file_path in self.repo_path.glob(f"**/*{ext}"):
+            # rglob is more robust for recursive discovery
+            for file_path in self.repo_path.rglob(f"*{ext}"):
                 if any(skip in str(file_path) for skip in [".venv", "venv", "node_modules", "__pycache__", ".git"]):
                     continue
                 if not include_tests and "test" in file_path.name.lower():
                     continue
                 files_to_analyze.append(file_path)
+        
+        # DEBUG: See how many files were actually found
+        print(f"DEBUG: Surveyor found {len(files_to_analyze)} potential files in {self.repo_path}")
+        
         if files_to_analyze:
             file_paths = [str(f.relative_to(self.repo_path)) for f in files_to_analyze]
             pareto_core = self.git_analyzer.get_pareto_core(file_paths, threshold=0.2)

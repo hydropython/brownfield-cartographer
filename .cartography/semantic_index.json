@@ -1,0 +1,94 @@
+{
+  "ok": true,
+  "results": {
+    "purpose_statements": {
+      "macros.cents_to_dollars": "Core logic for macros.cents_to_dollars. Analyzes system dependencies.",
+      "macros.generate_schema_name": "Core logic for macros.generate_schema_name. Analyzes system dependencies.",
+      "models.marts.customers": "Business logic for customers. Provides analytics-ready data.",
+      "models.marts.locations": "Business logic for locations. Provides analytics-ready data.",
+      "models.marts.metricflow_time_spine": "Business logic for metricflow_time_spine. Provides analytics-ready data.",
+      "models.marts.orders": "Business logic for orders. Provides analytics-ready data.",
+      "models.marts.order_items": "Business logic for order_items. Provides analytics-ready data.",
+      "models.marts.products": "Business logic for products. Provides analytics-ready data.",
+      "models.marts.supplies": "Business logic for supplies. Provides analytics-ready data.",
+      "models.staging.stg_customers": "Staging model for customers. Cleanses raw source data.",
+      "models.staging.stg_locations": "Staging model for locations. Cleanses raw source data.",
+      "models.staging.stg_orders": "Staging model for orders. Cleanses raw source data.",
+      "models.staging.stg_order_items": "Staging model for items. Cleanses raw source data.",
+      "models.staging.stg_products": "Staging model for products. Cleanses raw source data.",
+      "models.staging.stg_supplies": "Staging model for supplies. Cleanses raw source data.",
+      "dbt_project": "Core logic for dbt_project. Analyzes system dependencies.",
+      "package-lock": "Core logic for package-lock. Analyzes system dependencies.",
+      "packages": "Core logic for packages. Analyzes system dependencies.",
+      "Taskfile": "Core logic for Taskfile. Analyzes system dependencies.",
+      "models.staging.__sources": "Core logic for models.staging.__sources. Analyzes system dependencies.",
+      ".pre-commit-config": "Core logic for .pre-commit-config. Analyzes system dependencies.",
+      "external.stg_customers": "Staging model for customers. Cleanses raw source data.",
+      "external.orders": "Core logic for external.orders. Analyzes system dependencies.",
+      "external.stg_locations": "Staging model for locations. Cleanses raw source data.",
+      "external.stg_orders": "Staging model for orders. Cleanses raw source data.",
+      "external.order_items": "Core logic for external.order_items. Analyzes system dependencies.",
+      "external.stg_order_items": "Staging model for items. Cleanses raw source data.",
+      "external.stg_products": "Staging model for products. Cleanses raw source data.",
+      "external.stg_supplies": "Staging model for supplies. Cleanses raw source data.",
+      "external.ecom.raw_customers": "Core logic for external.ecom.raw_customers. Analyzes system dependencies.",
+      "external.ecom.raw_stores": "Core logic for external.ecom.raw_stores. Analyzes system dependencies.",
+      "external.ecom.raw_orders": "Core logic for external.ecom.raw_orders. Analyzes system dependencies.",
+      "external.ecom.raw_items": "Core logic for external.ecom.raw_items. Analyzes system dependencies.",
+      "external.ecom.raw_products": "Core logic for external.ecom.raw_products. Analyzes system dependencies.",
+      "external.ecom.raw_supplies": "Core logic for external.ecom.raw_supplies. Analyzes system dependencies."
+    },
+    "fde_answers": {
+      "q1_ingestion_path": "Via 12 staging models (e.g., {'id': 'models.staging.stg_customers', 'symbol_type': 'Module', 'confidence_score': 1.0, 'evidence_type': 'static', 'path': '', 'language': 'yaml', 'purpose_statement': None, 'domain_cluster': None, 'complexity_score': 0.0, 'change_velocity_30d': 0, 'is_dead_code_candidate': False, 'last_modified': '2026-01-21 19:41:18+01:00', 'imports': [], 'exports': [], 'in_degree': 0, 'out_degree': 0, 'file_path': 'models\\\\staging\\\\stg_customers.yml', 'entry_point_type': None, 'reachability_status': None, 'is_ghost_node': False, 'external_package': None})",
+      "q2_critical_outputs": "yml', 'entry_point_type': None, 'reachability_status': None, 'is_ghost_node': False, 'external_package': None}, yml', 'entry_point_type': None, 'reachability_status': None, 'is_ghost_node': False, 'external_package': None}, sql', 'entry_point_type': None, 'reachability_status': None, 'is_ghost_node': False, 'external_package': None}",
+      "q3_blast_radius": "High (Potential impact on 7 downstream models)",
+      "q4_logic_distribution": "Concentrated in 'marts/' directory",
+      "q5_git_velocity": "Analysis pending (Git integration required)"
+    },
+    "domain_clusters": {
+      "Staging": [
+        "models.staging.stg_customers",
+        "models.staging.stg_locations",
+        "models.staging.stg_orders",
+        "models.staging.stg_order_items",
+        "models.staging.stg_products",
+        "models.staging.stg_supplies",
+        "models.staging.__sources"
+      ],
+      "Marts": [
+        "models.marts.customers",
+        "models.marts.locations",
+        "models.marts.metricflow_time_spine",
+        "models.marts.orders",
+        "models.marts.order_items",
+        "models.marts.products",
+        "models.marts.supplies"
+      ],
+      "Macros": [
+        "macros.cents_to_dollars",
+        "macros.generate_schema_name"
+      ],
+      "Core/Other": [
+        "dbt_project",
+        "package-lock",
+        "packages",
+        "Taskfile",
+        ".pre-commit-config",
+        "external.stg_customers",
+        "external.orders",
+        "external.stg_locations",
+        "external.stg_orders",
+        "external.order_items",
+        "external.stg_order_items",
+        "external.stg_products",
+        "external.stg_supplies",
+        "external.ecom.raw_customers",
+        "external.ecom.raw_stores",
+        "external.ecom.raw_orders",
+        "external.ecom.raw_items",
+        "external.ecom.raw_products",
+        "external.ecom.raw_supplies"
+      ]
+    }
+  }
+}
